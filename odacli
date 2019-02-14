@@ -1,0 +1,30 @@
+--http://netsoftmate.blogspot.com/2018/01/oracle-database-appliance-odacli.html
+--ODACLI & ODAADMICLI
+odacli -h
+odacli describe-appliance
+odacli describe-appliance -d
+odacli describe-asr
+odacli list-cpucores
+odacli list-jobs
+odacli describe-latestpatch
+odacli list-networks
+odacli list-networkinterfaces
+
+*****ODAADMCLI Commands
+odaadmcli -h
+odaadmcli show -h
+odaadmcli show disk
+odaadmcli show disk -shared
+odaadmcli show diskgroup
+odaadmcli show diskgroup DATA
+odaadmcli show diskgroup RECO
+odaadmcli show fs
+odaadmcli show storage
+odaadmcli show env_hw
+odaadmcli show server
+odaadmcli show processor
+odaadmcli show memory
+daadmcli show iraid
+odaadmcli show power
+odaadmcli show network
+
