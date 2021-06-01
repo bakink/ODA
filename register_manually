@@ -2,3 +2,4 @@
 --How To Register Manually Created/Migrated Databases for ODA X7-2 HA using ODACLI (Doc ID 2453759.1)
 --http://erman-arslan-s-oracle-forum.2340467.n4.nabble.com/How-to-register-database-for-ODA-via-odacli-td9652.html
 --https://www.oracle.com/technetwork/database/database-appliance/learnmore/oda-dg-maa-wp-r1-19-5869757.pdf
+--Can't Register CLONE Database On ODA X7-2M (Doc ID 2553315.1)
