@@ -1,0 +1,20 @@
+--https://blogs.oracle.com/oda/creating-acfs-dir-oda
+
+--both nodes
+
+mkdir /cloudfs
+chown grid:asmdba /cloudfs
+
+--grid 
+asmca -silent -createVolume -volumeName cloudfs -volumeDiskGroup RECO -volumeSizeGB 1500
+
+ls /dev/asm
+
+asmca -silent -createACFS -acfsVolumeDevice /dev/asm/cloudfs-299 -acfsMountPoint /cloudfs
+
+su root
+
+/u01/app/grid/cfgtoollogs/asmca/scripts/acfs_script.sh
+
+
+chown grid:asmdba /cloudfs
