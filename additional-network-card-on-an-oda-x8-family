@@ -1,0 +1,178 @@
+
+--https://blog.dbi-services.com/how-to-configure-additional-network-card-on-an-oda-x8-family/
+
+How to configure additional network card on an ODA X8 family
+By Marc WagnerMay 25, 2020Database Administration & Monitoring, Hardware & Storage, Operation systems, OracleNo Comments
+    
+During a past project, we were using ODA X8-2M with one additional network card. As per my knowledge, on an appliance, additional cards are used to extend connectivity to additional network. Customer was really enforcing to have network redundancy between the 2 cards. I then took opportunity for some tests. In this post, I would like to share my experience on these tests and how to properly configure network card extension on an ODA.
+
+
+Introduction
+On an appliance, we can use RJ45 or optical fiber connectivity. On ODA X8 family, optical fiber cards have got 2 ports and RJ45 cards 4 ports. First card is installed in PCIe slot 7.
+On ODA X8-2S 2 additional cards can be installed in slot 8 and slot 10.
+On ODA X8-2M 2 additional cards can be installed in slot 2 and slot 10.
+The only requirement is that all cards from the same server must be from the same type. You can not mix RJ45 and optical fiber on the same ODA.
+
+In my case, as I have got 2 optical fiber network cards, my first card will have p7p1 and p7p2 ports configured (btbond1) and my second card will have p2p1 and p2p2 ports configured (btbond3).
+
+ODA bonding is configured to use active-backup mode with no LACP.
+
+Is bonding redundancy possible on an ODA?
+Configuring bonding across network card
+My first experience was to edit ifcfg-p7p2 and ifcfg-p2p1 linux network script configuration file, and assign p7p2 to btbond3 and p2p1 to btbond1. Of course, this was just for an experience and to keep such solution as definitive would mean to rollback this non supported configuration before any ODA patching. I really do not encourage to do so. 😉
+Anyway, my experience was not successful as after a reboot, both files were restored in their original configuration.
+
+Configuring a different IP address for each network on each card
+I then tried to configure both cards with 2 IP addresses from the 2 networks as below :
+Bond 1 IP 10.3.1.20 (no VLAN)
+Bond 3 IP 10.3.1.21 (VLAN 723)
+Bond 1 IP 192.20.30.2 (no VLAN)
+Bond 3 IP 192.20.30.3 (VLAN 723)
+
+The configuration could be successfully applied and everything was configured as expected :
+
+[root@ODA01 network-scripts]# ip addr show btbond1
+8: btbond1: mtu 1500 qdisc noqueue state UP
+link/ether b0:26:28:72:0e:d0 brd ff:ff:ff:ff:ff:ff
+inet 10.3.1.20/24 brd 10.3.1.255 scope global btbond1
+valid_lft forever preferred_lft forever
+ 
+[root@ODA01 network-scripts]# ip addr show btbond1.723
+17: btbond1.723@btbond1: mtu 1500 qdisc noqueue state UP
+link/ether b0:26:28:72:0e:d0 brd ff:ff:ff:ff:ff:ff
+inet 192.20.30.2/29 brd 192.20.30.7 scope global btbond1.723
+valid_lft forever preferred_lft forever
+ 
+[root@ODA01 network-scripts]# ip addr show btbond3
+9: btbond3: mtu 1500 qdisc noqueue state UP
+link/ether b0:26:28:7c:8a:50 brd ff:ff:ff:ff:ff:ff
+inet 10.3.1.21/24 brd 10.3.1.255 scope global btbond3
+valid_lft forever preferred_lft forever
+ 
+[root@ODA01 network-scripts]# ip addr show btbond3.723
+18: btbond3.723@btbond3: mtu 1500 qdisc noqueue state UP
+link/ether b0:26:28:7c:8a:50 brd ff:ff:ff:ff:ff:ff
+inet 192.20.30.3/29 brd 192.20.30.7 scope global btbond3.723
+valid_lft forever preferred_lft forever
+
+But, unfortunately, such a configuration is not working successfully as some packets got lost by the kernel when routing between both bonding.
+
+So, what’s next?
+Opening a SR by Oracle I could get the confirmation that network cards redundancy and physical failover between cards in case of total loss of a network card is not compatible and not possible. Appliance does not support it.
+
+Configure an ODA with 2 network cards
+In this part I would like to share how to configure additional network cards on an ODA. Below would be the IP Addresses to use :
+Bond 1 IP 10.3.1.20 (no VLAN) for application and backup network
+Bond 3 IP 192.20.30.2 (VLAN 723) for redundancy network
+
+btbond1 configuration
+btbond1 configuration has been done through configure-firstnet after reimaging the ODA :
+
+
+
+
+
+
+
+btbond3 configuration
+To configure an additional card on the ODA we will use the odacli create-network command.
+
+[root@ODA01 network-scripts]# odacli create-network -n btbond3 -t BOND -g 192.20.30.1 -p 192.20.30.2 -v 723 -m Replication -s 255.255.255.248 -w Dataguard
+{
+"jobId" : "d4695212-82f9-4ad1-9570-a0b7cd2faca5",
+"status" : "Created",
+"message" : null,
+"reports" : [ ],
+"createTimestamp" : "March 19, 2020 11:04:17 AM CET",
+"resourceList" : [ ],
+"description" : "Network service creation with names btbond3:Replication ",
+"updatedTime" : "March 19, 2020 11:04:17 AM CET"
+}
+ 
+[root@ODA01 network-scripts]# odacli describe-job -i "d4695212-82f9-4ad1-9570-a0b7cd2faca5"
+ 
+Job details
+----------------------------------------------------------------
+ID: d4695212-82f9-4ad1-9570-a0b7cd2faca5
+Description: Network service creation with names btbond3:Replication
+Status: Success
+Created: March 19, 2020 11:04:17 AM CET
+Message:
+ 
+Task Name Start Time End Time Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Setting network March 19, 2020 11:04:17 AM CET March 19, 2020 11:04:27 AM CET Success
+Setting up Network March 19, 2020 11:04:17 AM CET March 19, 2020 11:04:17 AM CET Success
+
+Check network
+[root@ODA01 network-scripts]# odacli list-networks
+ 
+ID Name NIC InterfaceType IP Address Subnet Mask Gateway VlanId
+---------------------------------------- -------------------- ---------- ---------- ------------------ ------------------ ------------------ ----------
+e920fc5c-62b4-4877-9008-ef3df96722ff Private-network priv0 INTERNAL 192.168.16.24 255.255.255.240
+28446275-ad88-4a62-ae5d-9835bbc73d8a Public-network btbond1 BOND 10.3.1.20 255.255.255.0 10.3.1.1
+9faf494b-d319-4190-8ba9-088f24e58918 Replication btbond3 BOND 192.20.30.2 255.255.255.248 192.20.30.1 723
+
+Check IP configuration from OS
+[root@ODA01 ~]# ip addr sh
+1: lo: mtu 16436 qdisc noqueue state UNKNOWN
+link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+inet 127.0.0.1/8 scope host lo
+valid_lft forever preferred_lft forever
+2: em1: mtu 1500 qdisc mq state DOWN qlen 1000
+link/ether 00:10:e0:ef:52:f6 brd ff:ff:ff:ff:ff:ff
+3: p7p1: mtu 1500 qdisc mq master btbond1 state UP qlen 1000
+link/ether b0:26:28:72:0e:d0 brd ff:ff:ff:ff:ff:ff
+4: p7p2: mtu 1500 qdisc mq master btbond1 state UP qlen 1000
+link/ether b0:26:28:72:0e:d0 brd ff:ff:ff:ff:ff:ff
+5: p2p1: mtu 1500 qdisc mq master btbond3 state DOWN qlen 1000
+link/ether b0:26:28:7c:8a:50 brd ff:ff:ff:ff:ff:ff
+6: p2p2: mtu 1500 qdisc mq master btbond3 state UP qlen 1000
+link/ether b0:26:28:7c:8a:50 brd ff:ff:ff:ff:ff:ff
+7: bond0: mtu 1500 qdisc noop state DOWN
+link/ether f2:30:97:19:bc:f4 brd ff:ff:ff:ff:ff:ff
+8: btbond1: mtu 1500 qdisc noqueue state UP
+link/ether b0:26:28:72:0e:d0 brd ff:ff:ff:ff:ff:ff
+inet 10.3.1.20/24 brd 10.3.1.255 scope global btbond1
+valid_lft forever preferred_lft forever
+9: btbond3: mtu 1500 qdisc noqueue state UP
+link/ether b0:26:28:7c:8a:50 brd ff:ff:ff:ff:ff:ff
+inet 192.20.30.2/29 brd 192.20.30.7 scope global btbond3
+valid_lft forever preferred_lft forever
+12: priv0: mtu 1500 qdisc noqueue state UNKNOWN
+link/ether 8e:7e:04:71:1b:96 brd ff:ff:ff:ff:ff:ff
+inet 192.168.16.24/28 brd 192.168.16.31 scope global priv0
+valid_lft forever preferred_lft forever
+13: virbr0: mtu 1500 qdisc noqueue state DOWN
+link/ether 52:54:00:c3:87:7d brd ff:ff:ff:ff:ff:ff
+inet 192.168.122.1/24 brd 192.168.122.255 scope global virbr0
+valid_lft forever preferred_lft forever
+14: virbr0-nic: mtu 1500 qdisc noop master virbr0 state DOWN qlen 500
+link/ether 52:54:00:c3:87:7d brd ff:ff:ff:ff:ff:ff
+
+Ping the IP address
+From the other ODA we can check that ODA01 is answering on both IPs.
+
+[root@ODA02 network-scripts]# ping 192.20.30.2
+PING 192.20.30.2 (192.20.30.2) 56(84) bytes of data.
+64 bytes from 192.20.30.2: icmp_seq=1 ttl=64 time=0.144 ms
+64 bytes from 192.20.30.2: icmp_seq=2 ttl=64 time=0.078 ms
+64 bytes from 192.20.30.2: icmp_seq=3 ttl=64 time=0.082 ms
+^C
+--- 192.20.30.2 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2575ms
+rtt min/avg/max/mdev = 0.078/0.101/0.144/0.031 ms
+ 
+[root@ODA02 network-scripts]# ping 10.3.1.20
+PING 10.3.1.20 (10.3.1.20) 56(84) bytes of data.
+64 bytes from 10.3.1.20: icmp_seq=1 ttl=64 time=0.153 ms
+64 bytes from 10.3.1.20: icmp_seq=2 ttl=64 time=0.077 ms
+64 bytes from 10.3.1.20: icmp_seq=3 ttl=64 time=0.075 ms
+^C
+--- 10.3.1.20 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2182ms
+rtt min/avg/max/mdev = 0.075/0.101/0.153/0.038 ms
+
+Conclusion
+On Oracle Appliance, network redundancy is only possible on the port side, so in case of faulty cable. Today, there is no solution to cover a faulty network card or a card loss. Having bonding crossing several network cards is not possible. Neither can we configure multiple IP addresses of same network over several network cards.
+Of course adding network IP from different VLAN on a card is still possible using odaadmcli as long as all bondings are on a different subnet.
