@@ -1,2 +1,6 @@
 --ODA Delete Database Using 'odacli delete-database' Command Fails with 'DCS-10001:Internal error encountered: null.' Message (Doc ID 2774025.1)
 --https://blog.dbi-services.com/issue-deleting-a-database-on-oda/
+
+--download
+
+--https://docs.oracle.com/en/engineered-systems/oracle-database-appliance/19.9/cmtrn/oda-patches.html#GUID-ACB179CD-5901-405C-B732-AD6923D78339
