@@ -1,0 +1,620 @@
+https://dibiei.wordpress.com/2021/08/27/erro-fail-to-run-command-failed-to-create-filegroup-xxxx-ao-tentar-criar-database-com-odacli/
+
+“Fail to run command Failed to create FileGroup XXXX” error when trying to Recreate Deleted Database via ODACLI
+AUGUST 27, 2021/ MAICON CARNEIRO
+In this post I present an error scenario that can occur when trying to create a Database in ODA via ODACLI using the same name as a Database that has been previously deleted. As demonstrated below, during the process of deleting a Database, ODACLI does not show any error, but fails to clear an important configuration in ASM, causing an error in the next attempt to create a Database with the same name.
+
+Removing the BIXZ2 database with ODACLI:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+# odacli delete-database --dbName bixz2
+{
+  "jobId" : "17e96217-c1c9-4a43-abfa-96a13e74a17a",
+  "status" : "Running",
+  "message" : null,
+  "reports" : [ ],
+  "createTimestamp" : "August 13, 2021 10:19:04 AM BRT",
+  "resourceList" : [ ],
+  "description" : "Database service deletion with db name: bixz2 with id : 9f23eb31-2860-4c0a-b32c-cc379b9a1c42",
+  "updatedTime" : "August 13, 2021 10:19:07 AM BRT"
+}
+The job completed successfully:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+# odacli describe-job -i 17e96217-c1c9-4a43-abfa-96a13e74a17a
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  17e96217-c1c9-4a43-abfa-96a13e74a17a
+            Description:  Database service deletion with db name: bixz2 with id : 9f23eb31-2860-4c0a-b32c-cc379b9a1c42
+                 Status:  Success
+                Created:  August 13, 2021 10:19:04 AM BRT
+                Message:
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Validate db 9f23eb31-2860-4c0a-b32c-cc379b9a1c42 for deletion August 13, 2021 10:19:07 AM BRT     August 13, 2021 10:19:07 AM BRT     Success
+Database Deletion                        August 13, 2021 10:19:08 AM BRT     August 13, 2021 10:20:28 AM BRT     Success
+Unregister Db From Cluster               August 13, 2021 10:20:28 AM BRT     August 13, 2021 10:20:28 AM BRT     Success
+Kill Pmon Process                        August 13, 2021 10:20:28 AM BRT     August 13, 2021 10:20:28 AM BRT     Success
+Database Files Deletion                  August 13, 2021 10:20:28 AM BRT     August 13, 2021 10:20:28 AM BRT     Success
+Deleting Volume                          August 13, 2021 10:20:40 AM BRT     August 13, 2021 10:20:47 AM BRT     Success
+Deleting Volume                          August 13, 2021 10:20:59 AM BRT     August 13, 2021 10:21:07 AM BRT     Success
+Delete File Groups of Database bixz2     August 13, 2021 10:21:08 AM BRT     August 13, 2021 10:21:08 AM BRT     Success
+Creating a new database with the same name:
+
+# odacli create-database --dbname bixz2 --dbhomeid 68861293-e81b-4ca1-9490-ec26f4b7a5b7 --dbstorage ACFS --characterset WE8ISO8859P1
+Password for SYS,SYSTEM and PDB Admin:
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  cf0797d4-beba-458e-9f1c-fbc3120ffb44
+            Description:  Database service creation with db name: bixz2
+                 Status:  Created
+                Created:  August 13, 2021 10:39:22 AM BRT
+                Message:
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+And the job fails to create the DB Storage:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+# odacli describe-job -i cf0797d4-beba-458e-9f1c-fbc3120ffb44
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  cf0797d4-beba-458e-9f1c-fbc3120ffb44
+            Description:  Database service creation with db name: bixz2
+                 Status:  Failure
+                Created:  August 13, 2021 10:39:22 AM BRT
+                Message:  DCS-10001:Internal error encountered: Fail to run command Failed to create FileGroupDATBIXZ2 on DiskGroupDATA.
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Database Service creation                August 13, 2021 10:39:30 AM BRT     August 13, 2021 10:39:33 AM BRT     Failure
+Database Service creation                August 13, 2021 10:39:30 AM BRT     August 13, 2021 10:39:33 AM BRT     Failure
+Setting up ssh equivalance               August 13, 2021 10:39:31 AM BRT     August 13, 2021 10:39:31 AM BRT     Success
+Create DATA FileGroup DATBIXZ2           August 13, 2021 10:39:32 AM BRT     August 13, 2021 10:39:33 AM BRT     Failure
+Database Service creation                August 13, 2021 10:39:32 AM BRT     August 13, 2021 10:39:33 AM BRT     Failure
+Creating FileGroup                       August 13, 2021 10:39:32 AM BRT     August 13, 2021 10:39:33 AM BRT     Failure
+The process failed because the File Group already existed in ASM.
+
+Attempting to list the DB Storages gives an error:
+
+1
+two
+# odacli list-dbstorages
+DCS-10001:Internal error encountered: For input string: "acfsutil info fs: ACFS-03037: not an ACFS file system".
+Investigating the DCS Agent log file:
+
+1
+two
+# cd /opt/oracle/dcs/log
+# grep -B5 -A5 ACFS-03037 dcs-agent.log
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+fs,
+ -o,
+ freespace,
+ /u02/app/oracle/oradata/bixz2]'
+2021-08-13 10:40:08,267 DEBUG [Thread-16286] [] c.o.d.c.u.CommonsUtils: Output :
+acfsutil info fs: ACFS-03037: not an ACFS file system
+2021-08-13 10:40:08,270 DEBUG [dw-18339 - GET /dbstorage] [] c.o.d.c.u.c.DCSProcessBuilder: Return code: 1
+2021-08-13 10:40:08,270 DEBUG [dw-18339 - GET /dbstorage] [] c.o.d.c.u.c.CommandExecutor: Return code: 1
+2021-08-13 10:40:08,270 DEBUG [dw-18339 - GET /dbstorage] [] c.o.d.c.u.CommonsUtils: Output :
+acfsutil info fs: ACFS-03037: not an ACFS file system
+2021-08-13 10:40:08,270 WARN [dw-18339 - GET /dbstorage] [] c.o.d.a.r.s.s.FileSystemUtils: Failed to get the fs size mounted at : /u02/app/oracle/oradata/bixz2
+2021-08-13 10:40:08,274 DEBUG [dw-18339 - GET /dbstorage] [] c.o.d.a.r.s.s.FileSystemUtils: fs size -> acfsutil info fs: ACFS-03037: not an ACFS file system
+2021-08-13 10:40:08,274 DEBUG [dw-18339 - GET /dbstorage] [] c.o.d.c.e.CatchRuntimeExpMapper: got RuntimeException java.lang.NumberFormatException: For input string: "acfsutil info fs: ACFS-03037: not an ACFS file system", msg=For input string: "acfsutil info fs: ACFS-03037: not an ACFS file system"
+2021-08-13 10:40:08,274 ERROR [dw-18339 - GET /dbstorage] [] c.o.d.c.e.CatchRuntimeExpMapper: java.lang.NumberFormatException.forInputString(NumberFormatException.java:65)
+java.lang.Long.parseLong(Long.java:589)
+java.lang.Long.valueOf(Long.java:803)
+com.oracle.dcs.agent.rpc.service.storage.FileSystemUtils.getAcfsFsFreeSize(FileSystemUtils.java:303)
+com.oracle.dcs.agent.rpc.service.storage.VolumeUtils.dbAcfsFillInfo(VolumeUtils.java:218)
+--
+org.eclipse.jetty.util.thread.ReservedThreadExecutor$ReservedThread.run(ReservedThreadExecutor.java:388)
+org.eclipse.jetty.util.thread.QueuedThreadPool.runJob(QueuedThreadPool.java:806)
+org.eclipse.jetty.util.thread.QueuedThreadPool$Runner.run(QueuedThreadPool.java:938)
+java.lang.Thread.run(Thread.java:748)
+ 
+2021-08-13 10:40:08,274 DEBUG [dw-18339 - GET /dbstorage] [] c.o.d.c.e.DcsExceptionMapper: Got DcsException DcsException{errorHttpCode=InternalError, msg=Internal error encountered: For input string: "acfsutil info fs: ACFS-03037: not an ACFS file system"., msgId=10001, causedBy=java.lang.NumberFormatException: For input string: "acfsutil info fs: ACFS-03037: not an ACFS file system"}
+An indication of the problem:
+
+Failed to get the fs size mounted at : /u02/app/oracle/oradata/bixz2
+What the agent is trying to do is something similar to this:
+
+$ acfsutil info fs /u02/app/oracle/oradata/bixz2
+But it returns an error, because this File System does not exist:
+
+acfsutil info fs: ACFS-03037: not an ACFS file system
+Querying File Groups in ASM with asmcmd:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+$ asmcmd
+ASMCMD> lsfg
+File Group         Disk Group  Quota Group  Used Quota MB  Client Name  Client Type
+DEFAULT_FILEGROUP  DATA        GENERIC      0
+DEFAULT_FILEGROUP  RECO        GENERIC      0
+SRV-ODAX8-C        DATA        GENERIC      376            SRV-ODAX8-C  CLUSTER
+RDOPRDXZ           RECO        GENERIC      184380         RDOPRDXZ     VOLUME
+COMMONSTORE        DATA        GENERIC      15420          COMMONSTORE  VOLUME
+RECO               RECO        GENERIC      3944508        RECO         VOLUME
+DATPRDXZ           DATA        GENERIC      9123900        DATPRDXZ     VOLUME
+RDOABCD            RECO        GENERIC      116796         RDOABCD      VOLUME
+DATABCD            DATA        GENERIC      307260         DATABCD      VOLUME
+RDOTRNXZ           RECO        GENERIC      116796         RDOTRNXZ     VOLUME
+DATTRNXZ           DATA        GENERIC      8570940        DATTRNXZ     VOLUME
+RDOABCDHML         RECO        GENERIC      116796         RDOABCDHML   VOLUME
+DATABCDHML         DATA        GENERIC      307260         DATABCDHML   VOLUME
+RDOBIQLIK          RECO        GENERIC      153660         RDOBIQLIK    VOLUME
+DATBIQLIK          DATA        GENERIC      1331240        DATBIQLIK    VOLUME
+RDOHMLXZ           RECO        GENERIC      73788          RDOHMLXZ     VOLUME
+DATHMLXZ           DATA        GENERIC      5836840        DATHMLXZ     VOLUME
+RDOBIXZ2           RECO        GENERIC      0              RDOBIXZ2     VOLUME
+DATBIXZ2           DATA        GENERIC      0              DATBIXZ2     VOLUME
+Cause
+The procedure of deleting DB Storage does not remove File Groups in ASM.
+
+Side effect
+
+When trying to create a new DB Storage with the same name, the agent tries to create a new File Group with the same name as the existing one, showing an error. At this point, information about the new File System has already been included in the ODA metadata, even though the File System has not yet been created. When we run the odacli list-dbstorages command , it will try to run an acfsutil fs info on every File System ACFS cataloged in its metadata.
+
+Solution (Workaround)
+I've been through this problem at least three times and the following procedure was effective in resolving this impasse, besides not offering risks of damaging the ODA metadata by editing configuration files manually. The strategy is to create the ACFS File Systems that odacli is trying to query, cleanly remove the DB Storage with odacli, remove the manually created File System and remove the File Groups that caused the problem.
+
+Steps to be taken
+
+1) Identify which File Systems odacli is trying to query and has an error
+
+2) Create the ADVM volumes
+
+3) Format volumes with ACFS
+
+4) Mount the ACFS File System on the local node (if it is an ODA-HA)
+
+5) Identify the DB Storage ID with failure status
+
+6) Remove DB Storage with odacli
+
+7) Unmounting the ACFS File Systems created manually
+
+8) Remove ADVM volumes
+
+9) Remove the File Groups that caused the problem
+
+Step by step
+1) Identify which File Systems odacli is trying to query and has an error
+
+Investigate the log file /opt/oracle/dcs/log/dcs-agent.log and look for ACFS related errors such as ”Failed to get the fs size mounted at” as shown above. Note that there can be two mount points, one for oradata and one for redo .
+
+2) Via asmcmd with grid user, create 2 ADVM volumes in their respective diskgroups, the sizes do not need to be the same as the original ones:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+ASMCMD> volcreate -G DATA -s 100g datbixz2
+ASMCMD> volcreate -G RECO -s 20g recobixz2
+ASMCMD>
+ASMCMD> volinfo -G DATA datbixz2
+Diskgroup Name: DATA
+ 
+         Volume Name: DATBIXZ2
+         Volume Device: /dev/asm/datbixz2-153
+         State: ENABLED
+         Size (MB): 102400
+         Resize Unit (MB): 64
+         Redundancy: MIRROR
+         Stripe Columns: 8
+         Stripe Width (K): 4096
+         Usage:
+         Mountpath:
+ 
+ASMCMD> volinfo -G RECO recobixz2
+Diskgroup Name: RECO
+ 
+         Volume Name: RECOBIXZ2
+         Volume Device: /dev/asm/recobixz2-46
+         State: ENABLED
+         Size (MB): 20480
+         Resize Unit (MB): 64
+         Redundancy: HIGH
+         Stripe Columns: 8
+         Stripe Width (K): 4096
+         Usage:
+         Mountpath:
+ 
+ASMCMD> exit
+3) Formatting ADVM volumes with ACFS:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+$ mkfs.acfs /dev/asm/datbixz2-153
+mkfs.acfs: version                   = 19.0.0.0.0
+mkfs.acfs: on-disk version           = 46.0
+mkfs.acfs: volume                    = /dev/asm/datbixz2-153
+mkfs.acfs: volume size               = 107374182400  ( 100.00 GB )
+mkfs.acfs: Format complete.
+ 
+$ mkfs.acfs /dev/asm/recobixz2-46
+mkfs.acfs: version                   = 19.0.0.0.0
+mkfs.acfs: on-disk version           = 46.0
+mkfs.acfs: volume                    = /dev/asm/recobixz2-46
+mkfs.acfs: volume size               = 21474836480  (  20.00 GB )
+mkfs.acfs: Format complete.
+4) Mounting volumes manually on local node:
+
+1
+two
+# mount -t acfs /dev/asm/datbixz2-153 /u02/app/oracle/oradata/bixz2
+# mount -t acfs /dev/asm/recobixz2-46 /u04/app/oracle/redo/bixz2
+5) Listing all DB Storages to identify the failed DB Storage ID:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+# odacli list-dbstorages
+ 
+ID                                       Type   DBUnique Name        DiskGroup  Location                                                     Total      Used       Available  Status
+---------------------------------------- ------ -------------------- ---------- ------------------------------------------------------------ ---------- ---------- ---------- ----------
+36ee228c-876c-4152-950f-4a5b2858ec1c     ACFS   prdxz_prd                                                                                                                     Configured
+                                                                     DATA       /u02/app/oracle/oradata/prdxz_prd                            2.89 TB    2.49 TB    413.16 GB
+                                                                     REDO       /u04/app/oracle/redo/prdxz/                                  59.99 GB   50.83 GB   9.16 GB
+                                                                     RECO       /u03/app/oracle/fast_recovery_area/                          1283.99 GB 328.05 GB  955.94 GB
+c783d9cc-8574-4936-b79c-4c11c50b92c6     ACFS   abcd_prd                                                                                                                      Configured
+                                                                     DATA       /u02/app/oracle/oradata/abcd_prd                             99.99 GB   46.41 GB   53.58 GB
+                                                                     REDO       /u04/app/oracle/redo/abcd/                                   37.99 GB   2.49 GB    35.50 GB
+                                                                     RECO       /u03/app/oracle/fast_recovery_area/                          1283.99 GB 328.05 GB  955.94 GB
+07d81563-9382-45d1-bffe-08e969f9d917     ACFS   trnxz                                                                                                                         Configured
+                                                                     DATA       /u02/app/oracle/oradata/trnxz                                2.71 TB    2.42 TB    301.84 GB
+                                                                     REDO       /u04/app/oracle/redo/trnxz/                                  37.98 GB   3.64 GB    34.35 GB
+                                                                     RECO       /u03/app/oracle/fast_recovery_area/                          1283.99 GB 328.05 GB  955.94 GB
+9999777f-fc9b-4a25-9db4-c84a7f4e4627     ACFS   abcdhml                                                                                                                       Configured
+                                                                     DATA       /u02/app/oracle/oradata/abcdhml                              99.99 GB   9.62 GB    90.37 GB
+                                                                     REDO       /u04/app/oracle/redo/abcdhml/                                37.98 GB   1.35 GB    36.64 GB
+                                                                     RECO       /u03/app/oracle/fast_recovery_area/                          1283.99 GB 328.05 GB  955.94 GB
+9746b884-6887-4022-9847-70b45c88a23e     ACFS   hmlxz                                                                                                                         Configured
+                                                                     DATA       /u02/app/oracle/oradata/hmlxz                                2.77 TB    2.49 TB    293.02 GB
+                                                                     REDO       /u04/app/oracle/redo/hmlxz/                                  23.99 GB   20.75 GB   3.24 GB
+                                                                     RECO       /u03/app/oracle/fast_recovery_area/                          1283.99 GB 328.05 GB  955.94 GB
+32a68fdb-ea35-45ec-a614-719bace366d5     ACFS   bixz2                                                                                                                         Failed
+                                                                     DATA       /u02/app/oracle/oradata/bixz2                                99.99 GB   576.0 MB   99.43 GB
+                                                                     REDO       /u04/app/oracle/redo/bixz2/                                  19.99 GB   350.0 MB   19.65 GB
+                                                                     RECO       /u03/app/oracle/fast_recovery_area/                          1283.99 GB 328.05 GB  955.94 GB
+6) Deleting the failed DB Storage:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+# odacli delete-dbstorage -i 32a68fdb-ea35-45ec-a614-719bace366d5
+{
+  "jobId" : "bc244967-dade-44f2-b1c3-9b3addb6ffdd",
+  "status" : "Running",
+  "message" : null,
+  "reports" : [ ],
+  "createTimestamp" : "August 13, 2021 12:29:51 PM BRT",
+  "resourceList" : [ ],
+  "description" : "Database storage service deletion with id: 32a68fdb-ea35-45ec-a614-719bace366d5",
+  "updatedTime" : "August 13, 2021 12:29:52 PM BRT"
+}
+1
+two
+3
+4
+5
+6
+7
+8
+9
+# odacli describe-job -i bc244967-dade-44f2-b1c3-9b3addb6ffdd
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  bc244967-dade-44f2-b1c3-9b3addb6ffdd
+            Description:  Database storage service deletion with id: 32a68fdb-ea35-45ec-a614-719bace366d5
+                 Status:  Success
+                Created:  August 13, 2021 12:29:51 PM BRT
+                Message:
+7) Dismantling the manually created File Systems:
+
+1
+two
+# umount /u04/app/oracle/redo/bixz2
+# umount /u02/app/oracle/oradata/bixz2
+8) Removing manually created ADVM volumes (grid user)
+
+1
+two
+3
+$ asmcmd
+ASMCMD> voldelete -G DATA datbixz2
+ASMCMD> voldelete -G RECO recobixz2
+9) Removing the File Groups that caused the problem.
+
+First, we list the File Groups to confirm the correct names. Tip: A File Group that is not being used must have the value 0 in the “Used Quota MB” column:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+ASMCMD> lsfg
+File Group         Disk Group  Quota Group  Used Quota MB  Client Name  Client Type
+DEFAULT_FILEGROUP  DATA        GENERIC      0
+DEFAULT_FILEGROUP  RECO        GENERIC      0
+SRV-ODAX8-C        DATA        GENERIC      376            SRV-ODAX8-C  CLUSTER
+RDOPRDXZ           RECO        GENERIC      184380         RDOPRDXZ     VOLUME
+COMMONSTORE        DATA        GENERIC      15420          COMMONSTORE  VOLUME
+RECO               RECO        GENERIC      3944508        RECO         VOLUME
+DATPRDXZ           DATA        GENERIC      9123900        DATPRDXZ     VOLUME
+RDOABCD            RECO        GENERIC      116796         RDOABCD      VOLUME
+DATABCD            DATA        GENERIC      307260         DATABCD      VOLUME
+RDOTRNXZ           RECO        GENERIC      116796         RDOTRNXZ     VOLUME
+DATTRNXZ           DATA        GENERIC      8570940        DATTRNXZ     VOLUME
+RDOABCDHML         RECO        GENERIC      116796         RDOABCDHML   VOLUME
+DATABCDHML         DATA        GENERIC      307260         DATABCDHML   VOLUME
+RDOBIQLIK          RECO        GENERIC      153660         RDOBIQLIK    VOLUME
+DATBIQLIK          DATA        GENERIC      1331240        DATBIQLIK    VOLUME
+RDOHMLXZ           RECO        GENERIC      73788          RDOHMLXZ     VOLUME
+DATHMLXZ           DATA        GENERIC      5836840        DATHMLXZ     VOLUME
+RDOBIXZ2           RECO        GENERIC      0              RDOBIXZ2     VOLUME
+DATBIXZ2           DATA        GENERIC      0              DATBIXZ2     VOLUME
+We want to remove the last two, referring to the BIXZ2 database:
+
+1
+two
+ASMCMD> rmfg -r RECO RDOBIXZ2
+ASMCMD> rmfg -r DATA DATBIXZ2
+The command syntax is: rmfg -r <Diskgroup Name> <File Group Name)
+
+10) New attempt to create the database with the same name no longer shows errors:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+# odacli create-database --dbname bixz2 --dbhomeid 68861293-e81b-4ca1-9490-ec26f4b7a5b7 --dbstorage ACFS --characterset WE8ISO8859P1
+Password for SYS,SYSTEM and PDB Admin:
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  f083880c-709d-47d4-992c-0940bfd38932
+            Description:  Database service creation with db name: bixz2
+                 Status:  Created
+                Created:  August 13, 2021 12:34:42 PM BRT
+                Message:
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+The process has passed the point where it had an error:
+
+1
+two
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+# odacli describe-job -i f083880c-709d-47d4-992c-0940bfd38932
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  f083880c-709d-47d4-992c-0940bfd38932
+            Description:  Database service creation with db name: bixz2
+                 Status:  Running
+                Created:  August 13, 2021 12:34:42 PM BRT
+                Message:
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Setting up ssh equivalance               August 13, 2021 12:34:51 PM BRT     August 13, 2021 12:34:51 PM BRT     Success
+Create DATA FileGroup DATBIXZ2           August 13, 2021 12:34:51 PM BRT     August 13, 2021 12:34:53 PM BRT     Success
+Create RECO FileGroup RDOBIXZ2           August 13, 2021 12:34:53 PM BRT     August 13, 2021 12:34:54 PM BRT     Success
+Creating volume datbixz2                 August 13, 2021 12:34:54 PM BRT     August 13, 2021 12:35:24 PM BRT     Success
+Creating volume rdobixz2                 August 13, 2021 12:35:24 PM BRT     August 13, 2021 12:35:50 PM BRT     Success
+Creating ACFS filesystem for DATA        August 13, 2021 12:35:50 PM BRT     August 13, 2021 12:36:11 PM BRT     Success
+Creating ACFS filesystem for RECO        August 13, 2021 12:36:11 PM BRT     August 13, 2021 12:36:34 PM BRT     Success
+Database Service creation                August 13, 2021 12:36:35 PM BRT     August 13, 2021 12:36:35 PM BRT     Running
+Database Creation                        August 13, 2021 12:36:35 PM BRT     August 13, 2021 12:36:35 PM BRT     Running
+Share this:
