@@ -1,0 +1,1141 @@
+https://blog.dbi-services.com/oracle-database-appliance-19-12-deployment/
+
+
+In this blog I am describing the deployment of an ODA with the version 19.12
+Following patches will be needed
+
+-Patch 30403643: Oracle Database Appliance ISO Image
+-Patch 30403673: Oracle Database Appliance Grid Infrastructure Clone for ODACLI/DCS stack
+-Patch 33152232: Oracle Database Appliance Server Patch for ODACLI/DCS Stack
+-Patch 30403662: Oracle Database Appliance Database Clone 19.12.0.0.210720 for ODACLI/DCS stack
+
+The first step I did is image the server with the latest 19.12 image available.
+Once logging with root on the ILOM we have to follow instructions. If not already changed the default ILOM credentials are
+
+login: root
+password: changeme
+
+1.Open a browser and connect to Oracle Integrated Lights Out Manager (ILOM) on Node 0 as root.
+
+https://ilom-ip-address
+2.Launch the Remote Console.
+
+a. Expand Remote Control in the left navigation.
+b. Click the Redirection tab.
+c. Click Launch for the Remote Console in the Actions menu.
+The state of the system determines what appears on the Console page.
+3.Add the image.
+
+a. Click the KVMS tab, then select Storage.
+b. Click Add.
+c. Browse to the Oracle Database Appliance Bare Metal ISO Image, highlight the image, then click Select.
+d. Click Connect.
+The mounting of the ISO image is successful when the Connect button changes to a Disconnect button.
+e. Click OK
+The CD-ROM icon in the top right corner is highlighted.
+4.Configure the CD-ROM as the next boot device.
+
+a. Expand Host Management in the left menu of the ILOM Remote Console tab.
+b. Click Host Control.
+c. Select CDROM from the Next Boot Device menu, then click Save.
+5.Power cycle the node.
+
+a. Click Power Control in the Host Management menu.
+b. Select Power Cycle , then click Save.
+The server will reboot and will begin the install
+
+
+
+
+
+To check the progress of re-synchronization, press the ALT-F2 key combination to open a second console and enter the following command:
+Once the new image available, we can now deploy the appliance.
+
+We can verify the image version
+
+
+
+After the reimage process, we can now configure the network. For this connect to the ILOM console and then connect to the ODA with root
+root/welcome1 (default password) and execute the command
+
+1
+[root@oak oda_software]# configure-firstnet
+Below an example of output
+
+
+
+Now we can access to our server via ssh using putty or another tool.
+Before deploying the ODA, we must update the repository with GI and DB software. The downloaded software must be first copied physically to the server. For info I am only using 19c databases.
+
+The following patches will be used in this part
+-Patch 30403673 Oracle Database Appliance GI Clone for ODACLI/DCS stack
+-Patch 30403662 Oracle Database Appliance Database Clone 19.12.0.0.210720 for ODACLI/DCS stack
+First, we unpack the patches
+
+1
+2
+3
+4
+5
+6
+7
+[root@oak oda_software]# unzip p30403673_1912000_Linux-x86-64.zip
+[root@oak oda_software]# unzip p30403662_1912000_Linux-x86-64.zip
+ 
+[root@oak oda_software]# ls -l odacli*
+-rw-r--r-- 1 root root 5011357677 Aug 23 18:08 odacli-dcs-19.12.0.0.0-210822.1-DB-19.12.0.0.zip
+-rw-r--r-- 1 root root 6520207683 Aug 23 18:12 odacli-dcs-19.12.0.0.0-210822.1-GI-19.12.0.0.zip
+[root@oak oda_software]#
+And update the repositories
+-For the GI stack
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+[root@oak oda_software]# /opt/oracle/dcs/bin/odacli update-repository -f /u01/oda_software/odacli-dcs-19.12.0.0.0-210822.1-GI-19.12.0.0.zip
+{
+  "jobId" : "d399b8d7-6c0c-4437-b919-3cb0adfb2130",
+  "status" : "Created",
+  "message" : "/u01/oda_software/odacli-dcs-19.12.0.0.0-210822.1-GI-19.12.0.0.zip",
+  "reports" : [ ],
+  "createTimestamp" : "September 24, 2021 19:29:55 PM UTC",
+  "resourceList" : [ ],
+  "description" : "Repository Update",
+  "updatedTime" : "September 24, 2021 19:29:55 PM UTC"
+}
+ 
+[root@oak oda_software]#
+Let us follow the progress of the job which should return SUCCESS
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+[root@oak oda_software]# /opt/oracle/dcs/bin/odacli describe-job -i "d399b8d7-6c0c-4437-b919-3cb0adfb2130"
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  d399b8d7-6c0c-4437-b919-3cb0adfb2130
+            Description:  Repository Update
+                 Status:  Success
+                Created:  September 24, 2021 7:29:55 PM UTC
+                Message:  /u01/oda_software/odacli-dcs-19.12.0.0.0-210822.1-GI-19.12.0.0.zip
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Unzip bundle                             September 24, 2021 7:29:58 PM UTC   September 24, 2021 7:30:44 PM UTC   Success
+registering image                        September 24, 2021 7:30:44 PM UTC   September 24, 2021 7:30:44 PM UTC   Success
+ 
+[root@oak oda_software]#
+-For the DB stack
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+[root@oak oda_software]# /opt/oracle/dcs/bin/odacli update-repository -f /u01/oda_software/odacli-dcs-19.12.0.0.0-210822.1-DB-19.12.0.0.zip
+{
+  "jobId" : "f9d2a02e-aacc-4bba-8ebf-22ba87dc906c",
+  "status" : "Created",
+  "message" : "/u01/oda_software/odacli-dcs-19.12.0.0.0-210822.1-DB-19.12.0.0.zip",
+  "reports" : [ ],
+  "createTimestamp" : "September 24, 2021 19:32:09 PM UTC",
+  "resourceList" : [ ],
+  "description" : "Repository Update",
+  "updatedTime" : "September 24, 2021 19:32:09 PM UTC"
+}
+[root@oak oda_software]#
+Now that the repository is updated by required files, we can create the appliance using the web interface or using a generated json file.
+To use the GUI connect with user oda-admin to your URL https://ODA_IP:7093/mgmt/index.html and create the appliance.
+
+In my case I have generated the following json file. As you can see some info are hidden, but just replace by your values.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+[root@oak oda_software]# cat oda-prod-01.json
+{
+    "instance": {
+        "instanceBaseName": "oda-prod-01-c",
+        "dbEdition": "EE",
+        "objectStoreCredentials": null,
+        "name": "oda-prod-01",
+        "systemPassword": "********",
+        "timeZone": "Europe/Zurich",
+        "domainName": "*******",
+        "dnsServers": [
+            "**********",
+            "********"
+        ],
+        "ntpServers": [
+            "**********",
+            "**********"
+        ],
+        "isIDMEnabled": "false",
+        "isRoleSeparated": true,
+        "osUserGroup": {
+            "users": [
+                {
+                    "userName": "oracle",
+                    "userRole": "oracleUser",
+                    "userId": 1001
+                },
+                {
+                    "userName": "grid",
+                    "userRole": "gridUser",
+                    "userId": 1000
+                }
+            ],
+            "groups": [
+                {
+                    "groupName": "oinstall",
+                    "groupRole": "oinstall",
+                    "groupId": 1001
+                },
+                {
+                    "groupName": "dbaoper",
+                    "groupRole": "dbaoper",
+                    "groupId": 1002
+                },
+                {
+                    "groupName": "dba",
+                    "groupRole": "dba",
+                    "groupId": 1003
+                },
+                {
+                    "groupName": "asmadmin",
+                    "groupRole": "asmadmin",
+                    "groupId": 1004
+                },
+                {
+                    "groupName": "asmoper",
+                    "groupRole": "asmoper",
+                    "groupId": 1005
+                },
+                {
+                    "groupName": "asmdba",
+                    "groupRole": "asmdba",
+                    "groupId": 1006
+                }
+            ]
+        }
+    },
+    "nodes": [
+        {
+            "nodeNumber": "0",
+            "nodeName": "oda-prod-01",
+            "network": [
+                {
+                    "ipAddress": "*********",
+                    "subNetMask": "255.255.255.0",
+                    "gateway": "********",
+                    "nicName": "btbond1",
+                    "networkType": [
+                        "Public"
+                    ],
+                    "isDefaultNetwork": true
+                }
+            ]
+        }
+    ],
+    "grid": {
+        "vip": [],
+        "diskGroup": [
+            {
+                "diskGroupName": "DATA",
+                "diskPercentage": 90,
+                "redundancy": "NORMAL"
+            },
+            {
+                "diskGroupName": "RECO",
+                "diskPercentage": 10,
+                "redundancy": "NORMAL"
+            }
+        ],
+        "language": "en",
+        "enableAFD": "TRUE",
+        "scan": null
+    },
+    "database": null,
+    "acr": {
+        "acrEnable": false
+    },
+    "sysOraHomeStorage": {
+        "diskgroup": "DATA",
+        "volumeSize": 80
+    }
+}
+[root@oak oda_software]#
+And we run the following command to create the appliance
+
+1
+[root@oak oda_software]# odacli create-appliance -r oda-prod-01.json
+The status of the job should be SUCCESS at the end.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+[root@oda-prod-01 oda_software]# odacli describe-job -i  168c69e9-be93-4e42-9fe1-691633865338
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  168c69e9-be93-4e42-9fe1-691633865338
+            Description:  Provisioning service creation
+                 Status:  Success
+                Created:  September 27, 2021 7:35:05 AM CEST
+                Message:
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Setting up Network                       September 27, 2021 7:35:07 AM CEST  September 27, 2021 7:35:07 AM CEST  Success
+Setting up Vlan                          September 27, 2021 7:35:21 AM CEST  September 27, 2021 7:35:21 AM CEST  Success
+Setting up Network                       September 27, 2021 7:35:36 AM CEST  September 27, 2021 7:35:36 AM CEST  Success
+network update                           September 27, 2021 7:35:55 AM CEST  September 27, 2021 7:36:10 AM CEST  Success
+updating network                         September 27, 2021 7:35:55 AM CEST  September 27, 2021 7:36:10 AM CEST  Success
+Setting up Network                       September 27, 2021 7:35:55 AM CEST  September 27, 2021 7:35:55 AM CEST  Success
+OS usergroup 'asmdba'creation            September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+OS usergroup 'asmoper'creation           September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+OS usergroup 'asmadmin'creation          September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+OS usergroup 'dba'creation               September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+OS usergroup 'dbaoper'creation           September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+OS usergroup 'oinstall'creation          September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+OS user 'grid'creation                   September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+OS user 'oracle'creation                 September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+Default backup policy creation           September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+Backup config metadata persist           September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+Grant permission to RHP files            September 27, 2021 7:36:11 AM CEST  September 27, 2021 7:36:11 AM CEST  Success
+Add SYSNAME in Env                       September 27, 2021 7:36:12 AM CEST  September 27, 2021 7:36:12 AM CEST  Success
+SSH equivalance setup                    September 27, 2021 7:36:12 AM CEST  September 27, 2021 7:36:12 AM CEST  Success
+Install oracle-ahf                       September 27, 2021 7:36:12 AM CEST  September 27, 2021 7:37:15 AM CEST  Success
+Grid home creation                       September 27, 2021 7:37:15 AM CEST  September 27, 2021 7:38:49 AM CEST  Success
+Creating GI home directories             September 27, 2021 7:37:15 AM CEST  September 27, 2021 7:37:15 AM CEST  Success
+Extract GI clone                         September 27, 2021 7:37:15 AM CEST  September 27, 2021 7:38:49 AM CEST  Success
+Storage discovery                        September 27, 2021 7:38:49 AM CEST  September 27, 2021 7:44:16 AM CEST  Success
+Creating wallet for Root User            September 27, 2021 7:44:16 AM CEST  September 27, 2021 7:44:20 AM CEST  Success
+Creating wallet for ASM Client           September 27, 2021 7:44:20 AM CEST  September 27, 2021 7:44:23 AM CEST  Success
+Grid stack creation                      September 27, 2021 7:44:24 AM CEST  September 27, 2021 7:54:57 AM CEST  Success
+Provisioning GI with RHP                 September 27, 2021 7:44:24 AM CEST  September 27, 2021 7:51:31 AM CEST  Success
+Updating GIHome version                  September 27, 2021 7:51:32 AM CEST  September 27, 2021 7:51:35 AM CEST  Success
+Post cluster OAKD configuration          September 27, 2021 7:54:57 AM CEST  September 27, 2021 7:57:40 AM CEST  Success
+Disk group 'RECO'creation                September 27, 2021 7:57:47 AM CEST  September 27, 2021 7:57:58 AM CEST  Success
+Setting ACL for disk groups              September 27, 2021 7:57:58 AM CEST  September 27, 2021 7:58:01 AM CEST  Success
+Modify DB file attributes                September 27, 2021 7:58:01 AM CEST  September 27, 2021 7:58:09 AM CEST  Success
+Register Scan and Vips to Public Network September 27, 2021 7:58:09 AM CEST  September 27, 2021 7:58:11 AM CEST  Success
+Volume 'commonstore'creation             September 27, 2021 7:59:13 AM CEST  September 27, 2021 7:59:28 AM CEST  Success
+ACFS File system 'DATA'creation          September 27, 2021 7:59:28 AM CEST  September 27, 2021 7:59:42 AM CEST  Success
+Provisioning service creation            September 27, 2021 7:59:44 AM CEST  September 27, 2021 7:59:44 AM CEST  Success
+persist new agent state entry            September 27, 2021 7:59:44 AM CEST  September 27, 2021 7:59:44 AM CEST  Success
+persist new agent state entry            September 27, 2021 7:59:44 AM CEST  September 27, 2021 7:59:44 AM CEST  Success
+Restart Zookeeper and DCS Agent          September 27, 2021 7:59:44 AM CEST  September 27, 2021 7:59:45 AM CEST  Success
+ 
+[root@oda-prod-01 oda_software]#
+After the creation of the appliance, all components are up to date except the ILOM.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+[root@oda-prod-01-ilom oda_software]# odacli describe-component
+System Version
+---------------
+19.10.0.0.0
+ 
+System node Name
+---------------
+oda-prod-01-ilom
+ 
+Local System Version
+---------------
+19.10.0.0.0
+ 
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.10.0.0.0           up-to-date
+ 
+GI                                        19.10.0.0.210119      up-to-date
+ 
+DCSAGENT                                  19.10.0.0.0           up-to-date
+ 
+OS                                        7.9                   up-to-date
+ 
+ILOM                                      5.0.1.21.r136383      5.0.1.21.a.r138015
+ 
+BIOS                                      52030400              up-to-date
+ 
+FIRMWARECONTROLLER                        VDV1RL04              up-to-date
+ 
+FIRMWAREDISK                              1132                  up-to-date
+ 
+HMP                                       2.4.7.0.1             up-to-date
+ 
+ 
+[root@oda-prod-01-ilom oda_software]#
+To update the ILOM, we decide to apply the patch 33152232
+
+Before we take a backup with odabr
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+[root@oda-prod-01 ~]# rpm -ivh odabr-2.0.1-69.noarch.rpm
+[root@oda-prod-01 ~]#
+ 
+[root@oda-prod-01 ~]# /opt/odabr/odabr backup -snap -osize 40 -rsize 20 -usize 80
+INFO: 2021-09-28 09:05:55: Please check the logfile '/opt/odabr/out/log/odabr_7846.log' for more details
+ 
+ 
+│▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+ odabr - ODA node Backup Restore - Version: 2.0.1-69
+ Copyright Oracle, Inc. 2013, 2021
+ --------------------------------------------------------
+ Author: Ruggero Citton 
+ RAC Pack, Cloud Innovation and Solution Engineering Team
+│▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+ 
+INFO: 2021-09-28 09:05:55: Checking superuser
+INFO: 2021-09-28 09:05:55: Checking Bare Metal
+ 
+INFO: 2021-09-28 09:05:55: Removing existing LVM snapshots
+WARNING: 2021-09-28 09:05:55: LVM snapshot for 'opt' does not exist
+.....
+We can list the backup of odabr
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+[root@oda-prod-01 ~]# /opt/odabr/odabr infosnap
+ 
+│▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+ odabr - ODA node Backup Restore - Version: 2.0.1-69
+ Copyright Oracle, Inc. 2013, 2021
+ --------------------------------------------------------
+ Author: Ruggero Citton 
+ RAC Pack, Cloud Innovation and Solution Engineering Team
+│▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+ 
+ 
+LVM snap name         Status                COW Size              Data%
+-------------         ----------            ----------            ------
+root_snap             active                20.00 GiB             0.01%
+opt_snap              active                30.12 GiB             0.01%
+u01_snap              active                <40.19 GiB            0.01%
+ 
+ 
+[root@oda-prod-01 ~]#
+Just for info be sure that you have at least 15G of free space on / /opt /u01
+
+Fisrt unpack the zip file and update the repository
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+[root@oda-prod-01 oda_software]# /opt/oracle/dcs/bin/odacli update-repository -f /u01/oda_software/oda-sm-19.12.0.0.0-210827-server.zip
+{
+  "jobId" : "156fd0aa-250f-49ed-a352-bea670e9d1a5",
+  "status" : "Created",
+  "message" : "/u01/oda_software/oda-sm-19.12.0.0.0-210827-server.zip",
+  "reports" : [ ],
+  "createTimestamp" : "September 28, 2021 08:59:09 AM CEST",
+  "resourceList" : [ ],
+  "description" : "Repository Update",
+  "updatedTime" : "September 28, 2021 08:59:09 AM CEST"
+}
+[root@oda-prod-01 oda_software]#
+Bes sure that the status of the job is SUCCESS using the command describe-job.
+
+Once done update the DCS ADMIN
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+[root@oda-prod-01 oda_software]# /opt/oracle/dcs/bin/odacli update-dcsadmin -v 19.12.0.0.0
+{
+  "jobId" : "47994684-9079-47f4-841e-3bed16052632",
+  "status" : "Created",
+  "message" : null,
+  "reports" : [ ],
+  "createTimestamp" : "September 28, 2021 09:13:38 AM CEST",
+  "resourceList" : [ ],
+  "description" : "DcsAdmin patching",
+  "updatedTime" : "September 28, 2021 09:13:38 AM CEST"
+}
+[root@oda-prod-01 oda_software]#
+Update the DCS components
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+[root@oda-prod-01 oda_software]# /opt/oracle/dcs/bin/odacli update-dcscomponents -v 19.12.0.0.0
+{
+  "jobId" : "a3315add-5bce-4add-8029-c60053fc84b9",
+  "status" : "Success",
+  "message" : "Update-dcscomponents is successful on all the node(s):DCS-Agent shutdown is successful. MySQL already on required version. Metadata migration is done before. Metadata schema update is done. dcsagent RPM is already updated.  dcscli RPM is already updated.  dcscontroller RPM is already updated.   zookeeper RPM is already updated  ",
+  "reports" : null,
+  "createTimestamp" : "September 28, 2021 09:15:03 AM CEST",
+  "description" : "Update-dcscomponents job completed and is not part of Agent job list",
+  "updatedTime" : "September 28, 2021 09:15:26 AM CEST"
+}
+[root@oda-prod-01 oda_software]#
+Update the DCS agent
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+[root@oda-prod-01 oda_software]# /opt/oracle/dcs/bin/odacli update-dcsagent -v 19.12.0.0.0
+{
+  "jobId" : "3279dacf-f25b-42c2-a9eb-bcedb3d7e522",
+  "status" : "Created",
+  "message" : "Dcs agent will be restarted after the update. Please wait for 2-3 mins before executing the other commands",
+  "reports" : [ ],
+  "createTimestamp" : "September 28, 2021 09:16:28 AM CEST",
+  "resourceList" : [ ],
+  "description" : "DcsAgent patching",
+  "updatedTime" : "September 28, 2021 09:16:28 AM CEST"
+}
+[root@oda-prod-01 oda_software]#
+Once all these previous jobs return SUCCESS we can do prepatch checks
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+[root@oda-prod-01 oda_software]# /opt/oracle/dcs/bin/odacli create-prepatchreport -s -v 19.12.0.0.0
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  c267d74e-03a9-421b-9cca-1da43b72af4e
+            Description:  Patch pre-checks for [OS, ILOM, GI, ORACHKSERVER]
+                 Status:  Created
+                Created:  September 28, 2021 9:17:46 AM CEST
+                Message:  Use 'odacli describe-prepatchreport -i c267d74e-03a9-421b-9cca-1da43b72af4e' to check details of results
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+ 
+[root@oda-prod-01 oda_software]#
+In my case the prepatch report did not return SUCCESS
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+[root@oda-prod-01 oda_software]# odacli describe-prepatchreport -i c267d74e-03a9-421b-9cca-1da43b72af4e
+ 
+Patch pre-check report
+------------------------------------------------------------------------
+                 Job ID:  c267d74e-03a9-421b-9cca-1da43b72af4e
+            Description:  Patch pre-checks for [OS, ILOM, GI, ORACHKSERVER]
+                 Status:  FAILED
+                Created:  September 28, 2021 9:17:46 AM CEST
+                 Result:  One or more pre-checks failed for [GI, ORACHK]
+ 
+Node Name
+---------------
+oda-prod-01
+ 
+Pre-Check                      Status   Comments
+------------------------------ -------- --------------------------------------
+__OS__
+Validate supported versions     Success   Validated minimum supported versions.
+Validate patching tag           Success   Validated patching tag: 19.12.0.0.0.
+Is patch location available     Success   Patch location is available.
+Verify OS patch                 Success   There are no packages available for
+                                          an update
+Validate command execution      Success   Validated command execution
+ 
+__ILOM__
+Validate supported versions     Success   Validated minimum supported versions.
+Validate patching tag           Success   Validated patching tag: 19.12.0.0.0.
+Is patch location available     Success   Patch location is available.
+Checking Ilom patch Version     Success   Successfully verified the versions
+Patch location validation       Success   Successfully validated location
+Validate command execution      Success   Validated command execution
+ 
+__GI__
+Validate supported GI versions  Success   Validated minimum supported versions.
+Validate available space        Success   Validated free space under /u01
+Is clusterware running          Success   Clusterware is running
+Validate patching tag           Success   Validated patching tag: 19.12.0.0.0.
+Is system provisioned           Success   Verified system is provisioned
+Validate ASM in online          Success   ASM is online
+Validate kernel log level       Success   Successfully validated the OS log
+                                          level
+Validate minimum agent version  Success   GI patching enabled in current
+                                          DCSAGENT version
+Validate Central Inventory      Success   oraInventory validation passed
+Validate patching locks         Success   Validated patching locks
+Validate clones location exist  Success   Validated clones location
+Validate DB start dependencies  Success   DBs START dependency check passed
+Validate DB stop dependencies   Success   DBs STOP dependency check passed
+Evaluate GI patching            Failed
+Validate command execution      Aborted   Internal error encountered
+ 
+__ORACHK__
+Running orachk                  Aborted   Internal error encountered
+Validate command execution      Aborted   Internal error encountered
+ 
+[root@oda-prod-01 oda_software]#
+It seems that the precheck fails for the GI.After analysing the dcs log files we decide to ignore this error as the GI is already at the last version and then we apply the patch. I would like to thank here my colleague Marc Wagner.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+[root@oda-prod-01 oda_software]# /opt/oracle/dcs/bin/odacli update-server -v 19.12.0.0.0 -f
+{
+  "jobId" : "23ee4376-a7ae-46b0-ab7d-93b1d32188f8",
+  "status" : "Created",
+  "message" : "Success of server update will trigger reboot of the node after 4-5 minutes. Please wait until the node reboots.",
+  "reports" : [ ],
+  "createTimestamp" : "September 28, 2021 09:26:29 AM CEST",
+  "resourceList" : [ ],
+  "description" : "Server Patching",
+  "updatedTime" : "September 28, 2021 09:26:29 AM CEST"
+}
+[root@oda-prod-01 oda_software]#
+The patch fails with a DCS-10001
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+[root@oda-prod-01 oda_software]# odacli describe-job -i "23ee4376-a7ae-46b0-ab7d-93b1d32188f8"
+ 
+Job details
+----------------------------------------------------------------
+                     ID:  23ee4376-a7ae-46b0-ab7d-93b1d32188f8
+            Description:  Server Patching
+                 Status:  Failure
+                Created:  September 28, 2021 9:26:29 AM CEST
+                Message:  DCS-10001:Internal error encountered: Failed update Ilom using USB.
+ 
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Server patching                          September 28, 2021 9:26:43 AM CEST  September 28, 2021 9:30:44 AM CEST  Failure
+Server patching                          September 28, 2021 9:26:43 AM CEST  September 28, 2021 9:30:44 AM CEST  Failure
+Creating repositories using yum          September 28, 2021 9:26:44 AM CEST  September 28, 2021 9:26:46 AM CEST  Success
+Updating YumPluginVersionLock rpm        September 28, 2021 9:26:46 AM CEST  September 28, 2021 9:26:46 AM CEST  Success
+Applying OS Patches                      September 28, 2021 9:26:46 AM CEST  September 28, 2021 9:26:47 AM CEST  Success
+Creating repositories using yum          September 28, 2021 9:26:47 AM CEST  September 28, 2021 9:26:48 AM CEST  Success
+Applying HMP Patches                     September 28, 2021 9:26:48 AM CEST  September 28, 2021 9:26:48 AM CEST  Success
+Patch location validation                September 28, 2021 9:26:49 AM CEST  September 28, 2021 9:26:49 AM CEST  Success
+oda-hw-mgmt upgrade                      September 28, 2021 9:26:49 AM CEST  September 28, 2021 9:26:49 AM CEST  Success
+OSS Patching                             September 28, 2021 9:26:49 AM CEST  September 28, 2021 9:26:49 AM CEST  Success
+Applying Firmware Disk Patches           September 28, 2021 9:26:49 AM CEST  September 28, 2021 9:26:53 AM CEST  Success
+Applying Firmware Controller Patches     September 28, 2021 9:26:53 AM CEST  September 28, 2021 9:26:57 AM CEST  Success
+Server patching                          September 28, 2021 9:26:57 AM CEST  September 28, 2021 9:30:44 AM CEST  Failure
+Checking Ilom patch Version              September 28, 2021 9:26:57 AM CEST  September 28, 2021 9:26:57 AM CEST  Success
+Patch location validation                September 28, 2021 9:26:57 AM CEST  September 28, 2021 9:26:57 AM CEST  Success
+Save password in Wallet                  September 28, 2021 9:26:57 AM CEST  September 28, 2021 9:26:58 AM CEST  Success
+Server patching                          September 28, 2021 9:26:58 AM CEST  September 28, 2021 9:30:44 AM CEST  Failure
+Apply Ilom patch                         September 28, 2021 9:26:58 AM CEST  September 28, 2021 9:30:44 AM CEST  Failure
+ 
+[root@oda-prod-01 ~]#
+According this Oracle document
+ODA Server Update Failed with Error DCS-10001 Failed Update Ilom Using USB (Doc ID 2733383.1)
+We are facing to a firewall issue. And this was the case after verification. So we decide manually patch the ILOM.
+We just follow this nice blog from Jerome
+
+At the end of the process, we can validate that all components are up-to-date now.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+[root@oda-prod-01 ~]# odacli describe-component
+System Version
+---------------
+19.12.0.0.0
+ 
+System node Name
+---------------
+oda-prod-01
+ 
+Local System Version
+---------------
+19.12.0.0.0
+ 
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.12.0.0.0           up-to-date
+ 
+GI                                        19.12.0.0.210720      up-to-date
+ 
+DB                                        19.12.0.0.210720      up-to-date
+ 
+DCSCONTROLLER                             19.12.0.0.0           up-to-date
+ 
+DCSCLI                                    19.12.0.0.0           up-to-date
+ 
+DCSAGENT                                  19.12.0.0.0           up-to-date
+ 
+DCSADMIN                                  19.12.0.0.0           up-to-date
+ 
+OS                                        7.9                   up-to-date
+ 
+ILOM                                      5.0.2.24.r141466      up-to-date
+ 
+BIOS                                      52050300              up-to-date
+ 
+FIRMWARECONTROLLER                        VDV1RL04              up-to-date
+ 
+FIRMWAREDISK                              1132                  up-to-date
+ 
+HMP                                       2.4.8.0.600           up-to-date
+ 
+ 
+[root@oda-prod-01 ~]#
+And now we can remove the snapshots taken with odabar
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+[root@oda-prod-01 ~]# /opt/odabr/odabr delsnap
+INFO: 2021-09-28 10:47:30: Please check the logfile '/opt/odabr/out/log/odabr_44201.log' for more details
+ 
+INFO: 2021-09-28 10:47:30: Removing LVM snapshots
+INFO: 2021-09-28 10:47:30: ...removing LVM snapshot for 'opt'
+SUCCESS: 2021-09-28 10:47:30: ...snapshot for 'opt' removed successfully
+INFO: 2021-09-28 10:47:30: ...removing LVM snapshot for 'u01'
+SUCCESS: 2021-09-28 10:47:31: ...snapshot for 'u01' removed successfully
+INFO: 2021-09-28 10:47:31: ...removing LVM snapshot for 'root'
+SUCCESS: 2021-09-28 10:47:31: ...snapshot for 'root' removed successfully
+SUCCESS: 2021-09-28 10:47:31: Remove LVM snapshots done successfully
+Conclusion
+Hope that the blog will help. What I want to add is that sometimes you can experience Failed prechecks, but you have to investigate the log files and decide if you can ignore these errors or no. You can find more info in the documentation
