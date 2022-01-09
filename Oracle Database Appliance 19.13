@@ -1,0 +1,671 @@
+--https://blog.dbi-services.com/oracle-database-appliance-19-13-whats-new-and-how-to-patch/
+
+Introduction
+Patch 19.13 is now available on ODA. It’s time to test it.
+
+What’s new?
+This version brings October’s PSU to database and grid homes with their bug fixes, as usual. It also brings 21.4 for DB Systems (21c being an innovation release, understand just for testing). Something new that some of us have been waiting for a while, a multi-user mode for odacli tasks: you don’t need to be root anymore for managing the appliance. This new feature can only be enabled when provisioning, so don’t expect to catch it after patching. A parameter deployment feature is also available now, helping managing parameters across multiple instances (bare metal only).
+
+This 19.13 will be the latest one for those still using virtualized ODA: virtualization is now integrated in all bare metal ODAs with KVM (instead of OVM), check this blog post if you’re not aware about that. Plan to redeploy your virtualized ODA to bare metal if your system is still supported for a couple of years.
+
+Which ODA is compatible with 19.13?
+For sure, ODA X8 in its 3 flavors (S, M, HA) is compatible as this is the current one (but it should be replaced quite soon). X7 and X6 are also compatible without any problem. X5-2HA is also still supported, this could be one of the latest patch for this nearly 7-year old ODA.
+
+Is this patch a cumulative one?
+Most of the patches are cumulative, meaning that you can apply them on top of a version older than the previous one. This 19.13 can be applied on top of 19.9 or later, 19.9 being 1 year old. This is something I would recommend to each of my customer: apply patches at least once a year to avoid longer patching, longer meaning multiple patches to apply to reach target version.
+
+If you are still using an old version, I would say 18.x or older, consider reimaging instead of patching. Reimaging is much more comfortable and cleaner compared to 3 or more patches to apply.
+
+Is there also a patch for my databases?
+If you’re using 12.1, 12.2 or 19c, these databases can be patched. 11gR2 and 18c are no more supported on ODA, meaning that your databases will continue working but you should definitely consider an upgrade quite soon. Remember that if you choose to reimage to this latest version, you will not find any 18c or 11gR2 DB homes to deploy.
+
+Download the patch and clone files
+Since months now, the patch is lighter because it doesn’t include DB and GI patches anymore. Patching DB or GI is deploying a new home and migrating from the older one. As this new way of patching is based on DB and GI clones, download the corresponding clones to be able to apply the complete patch.
+
+33518928 => the patch itself
+30403673 => the GI clone needed for deploying new version (mandatory)
+30403662 => the DB clone for deploying new version of 19c (if you use 19c databases)
+27119402 => the DB clone for deploying new version of 12.2 (if you use 12.2 databases)
+23494992 => the DB clone for deploying new version of 12.1 (if you use 12.1 databases)
+
+Be sure to choose the very latest 19.13 when downloading, as most of the time My Oracle Support will propose an older version for GI clones and DB clones (patch number is the same for older versions).
+
+Prepare the patching
+A pre-patch is now provided and needed before applying an ODA patch, but prior running it, please check these prerequisites:
+
+filesystems have 20% available free space (does not concern acfs volumes)
+additional rpms manually installed should be removed
+revert profile scripts to default’s one (concerns grid and oracle users)
+make sure you can afford longer than planned downtime, 4 hours being the bare minimum for patching and… troubleshooting. 1 day is never too much.
+Version precheck
+Start to check current version on all components:
+
+odacli describe-component | grep -v ^$
+System Version
+---------------
+19.12.0.0.0
+System node Name
+---------------
+dbi-oda-x8
+Local System Version
+---------------
+19.12.0.0.0
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.12.0.0.0           up-to-date
+GI                                        19.12.0.0.210720      up-to-date
+DB                                        19.12.0.0.210720      up-to-date
+DCSCONTROLLER                             19.12.0.0.0           up-to-date
+DCSCLI                                    19.12.0.0.0           up-to-date
+DCSAGENT                                  19.12.0.0.0           up-to-date
+DCSADMIN                                  19.12.0.0.0           up-to-date
+OS                                        7.9                   up-to-date
+ILOM                                      5.0.2.24.r141466      up-to-date
+BIOS                                      52050300              up-to-date
+FIRMWARECONTROLLER                        VDV1RL04              up-to-date
+FIRMWAREDISK                              1132                  up-to-date
+HMP                                       2.4.8.0.600           up-to-date
+Once the patch will be registered in the ODA repository, the “Available Version” column will be fed with versions provided within the patch.
+
+On my ODA X8-2M, I only need 19c databases. As I’m already running on previous 19.12 version, patching shouldn’t be too risky.
+
+Prepare the files and update the DCS tools
+Copy the patch files to your ODA in a temp directory. Then unzip the files:
+
+cd /opt/dbi/
+for f in p*1913000*.zip; do unzip -n $f; done
+Archive:  p30403662_1913000_Linux-x86-64.zip
+ extracting: odacli-dcs-19.13.0.0.0-211109-DB-19.13.0.0.zip
+Archive:  p30403673_1913000_Linux-x86-64.zip
+ extracting: odacli-dcs-19.13.0.0.0-211109-GI-19.13.0.0.zip
+Archive:  p33518928_1913000_Linux-x86-64.zip
+ extracting: oda-sm-19.13.0.0.0-211127-server.zip
+
+rm -rf p*1913000*.zip
+Register the patch in the repository:
+
+odacli update-repository -f /opt/dbi/oda-sm-19.13.0.0.0-211127-server.zip
+
+odacli describe-component | grep -v ^$
+System Version
+---------------
+19.12.0.0.0
+System node Name
+---------------
+dbi-oda-x8
+Local System Version
+---------------
+19.12.0.0.0
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.12.0.0.0           19.13.0.0.0
+GI                                        19.12.0.0.210720      19.13.0.0.211019
+DB                                        19.12.0.0.210720      19.13.0.0.211019
+DCSCONTROLLER                             19.12.0.0.0           19.13.0.0.0
+DCSCLI                                    19.12.0.0.0           19.13.0.0.0
+DCSAGENT                                  19.12.0.0.0           19.13.0.0.0
+DCSADMIN                                  19.12.0.0.0           19.13.0.0.0
+OS                                        7.9                   up-to-date
+ILOM                                      5.0.2.24.r141466      up-to-date
+BIOS                                      52050300              up-to-date
+FIRMWARECONTROLLER                        VDV1RL04              up-to-date
+FIRMWAREDISK                              1132                  up-to-date
+HMP                                       2.4.8.0.600           up-to-date
+Don’t update the repository with GI and DB clones now because you will receive this kind of error:
+
+DCS-10001:Internal error encountered: Cannot find the corresponding image for /opt/dbi/odacli-dcs-19.13.0.0.0-211109-GI-19.13.0.0.zip in img_metadata.
+Update the DCS tooling of your ODA:
+
+odacli update-dcsadmin -v 19.13.0.0.0
+odacli update-dcscomponents -v 19.13.0.0.0
+odacli update-dcsagent -v 19.13.0.0.0
+Note that updating the DCS components is not done through a job:
+
+odacli list-jobs | head -n 3;  odacli list-jobs | tail -n 4
+ID                                       Description                      Created                             Status
+---------------------------------------- -------------------------------- ----------------------------------- ---------
+9eccda54-418f-4ac8-8196-197a17fe1f48     Repository Update                                                           December 9, 2021 11:01:49 AM CET    Success
+d1daaedd-f522-448e-8f67-08db0e80b6db     DcsAdmin patching                                                           December 9, 2021 3:23:45 PM CET     Success
+227f0207-85d0-4d4c-bee8-61545241a588     DcsAgent patching                                                           December 9, 2021 3:26:15 PM CET     Success
+Now you can register GI and DB clones:
+
+odacli update-repository -f /opt/dbi/odacli-dcs-19.13.0.0.0-211109-GI-19.13.0.0.zip
+odacli update-repository -f /opt/dbi/odacli-dcs-19.13.0.0.0-211109-DB-19.13.0.0.zip
+
+odacli list-jobs | head -n 3;  odacli list-jobs | tail -n 3
+ID                                       Description                                                                 Created                             Status
+---------------------------------------- --------------------------------------------------------------------------- ----------------------------------- ----------
+53e78d25-f594-4784-a320-aa3df5e996a6     Repository Update                                                           December 9, 2021 3:48:14 PM CET     Success
+38c4202e-b1e3-4ba7-8431-78c7b33ab776     Repository Update                                                           December 9, 2021 3:54:59 PM CET     Success
+
+odacli describe-component | grep -v ^$
+System Version
+---------------
+19.13.0.0.0
+System node Name
+---------------
+dbi-oda-x8
+Local System Version
+---------------
+19.13.0.0.0
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.12.0.0.0           19.13.0.0.0
+GI                                        19.12.0.0.210720      19.13.0.0.211019
+DB                                        19.12.0.0.210720      19.13.0.0.211019
+DCSCONTROLLER                             19.13.0.0.0           up-to-date
+DCSCLI                                    19.13.0.0.0           up-to-date
+DCSAGENT                                  19.13.0.0.0           up-to-date
+DCSADMIN                                  19.13.0.0.0           up-to-date
+OS                                        7.9                   up-to-date
+ILOM                                      5.0.2.24.r141466      up-to-date
+BIOS                                      52050300              up-to-date
+SHARED CONTROLLER FIRMWARE                VDV1RL04              up-to-date
+LOCAL DISK FIRMWARE                       1132                  up-to-date
+SHARED DISK FIRMWARE                      1132                  up-to-date
+HMP                                       2.4.8.0.600           up-to-date
+This update will be limited to Oracle software, so it shouldn’t last hours.
+
+Pre-patching report
+Let’s check if patching has the green light:
+
+odacli create-prepatchreport -s -v 19.13.0.0.0
+
+Job details
+----------------------------------------------------------------
+                     ID:  3e9c9d23-948e-4dbb-8b23-8ab2f6e9fb14
+            Description:  Patch pre-checks for [OS, ILOM, GI, ORACHKSERVER]
+                 Status:  Created
+                Created:  December 9, 2021 4:26:59 PM CET
+                Message:  Use 'odacli describe-prepatchreport -i 3e9c9d23-948e-4dbb-8b23-8ab2f6e9fb14' to check details of results
+
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+
+
+odacli describe-prepatchreport -i 3e9c9d23-948e-4dbb-8b23-8ab2f6e9fb14
+
+Patch pre-check report
+------------------------------------------------------------------------
+                 Job ID:  3e9c9d23-948e-4dbb-8b23-8ab2f6e9fb14
+            Description:  Patch pre-checks for [OS, ILOM, GI, ORACHKSERVER]
+                 Status:  SUCCESS
+                Created:  December 9, 2021 4:26:59 PM CET
+                 Result:  All pre-checks succeeded
+
+Node Name
+---------------
+dbi-oda-x8
+
+Pre-Check                      Status   Comments
+------------------------------ -------- --------------------------------------
+__OS__
+Validate supported versions     Success   Validated minimum supported versions.
+Validate patching tag           Success   Validated patching tag: 19.13.0.0.0.
+Is patch location available     Success   Patch location is available.
+Verify OS patch                 Success   Verified OS patch
+Validate command execution      Success   Validated command execution
+
+__ILOM__
+Validate supported versions     Success   Validated minimum supported versions.
+Validate patching tag           Success   Validated patching tag: 19.13.0.0.0.
+Is patch location available     Success   Patch location is available.
+Checking Ilom patch Version     Success   Patch already applied
+Patch location validation       Success   Successfully validated location
+Validate command execution      Success   Validated command execution
+
+__GI__
+Validate GI metadata            Success   Successfully validated GI metadata
+Validate supported GI versions  Success   Validated minimum supported versions.
+Validate available space        Success   Validated free space under /u01
+Is clusterware running          Success   Clusterware is running
+Validate patching tag           Success   Validated patching tag: 19.13.0.0.0.
+Is system provisioned           Success   Verified system is provisioned
+Validate ASM in online          Success   ASM is online
+Validate kernel log level       Success   Successfully validated the OS log
+                                          level
+Validate minimum agent version  Success   GI patching enabled in current
+                                          DCSAGENT version
+Validate Central Inventory      Success   oraInventory validation passed
+Validate patching locks         Success   Validated patching locks
+Validate clones location exist  Success   Validated clones location
+Validate DB start dependencies  Success   DBs START dependency check passed
+Validate DB stop dependencies   Success   DBs STOP dependency check passed
+Evaluate GI patching            Success   Successfully validated GI patching
+Validate command execution      Success   Validated command execution
+
+__ORACHK__
+Running orachk                  Success   Successfully ran Orachk
+Validate command execution      Success   Validated command execution
+Prepatch lasted about 10 minutes on my ODA, and everything seems to be OK.
+
+Patching infrastructure and GI
+Let’s start the update-server:
+
+odacli update-server -v 19.13.0.0.0
+odacli describe-job -i f0915a98-5acf-4697-94e2-8c0192bcfce2
+
+Job details
+----------------------------------------------------------------
+                     ID:  f0915a98-5acf-4697-94e2-8c0192bcfce2
+            Description:  Server Patching
+                 Status:  Success
+                Created:  December 10, 2021 2:07:20 PM CET
+                Message:  Successfully patched GI with RHP
+
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Validating GI user metadata              December 10, 2021 2:07:33 PM CET    December 10, 2021 2:07:33 PM CET    Success
+Creating repositories using yum          December 10, 2021 2:07:34 PM CET    December 10, 2021 2:07:38 PM CET    Success
+Updating YumPluginVersionLock rpm        December 10, 2021 2:07:38 PM CET    December 10, 2021 2:07:38 PM CET    Success
+Applying OS Patches                      December 10, 2021 2:07:38 PM CET    December 10, 2021 2:16:03 PM CET    Success
+Creating repositories using yum          December 10, 2021 2:16:03 PM CET    December 10, 2021 2:16:04 PM CET    Success
+Applying HMP Patches                     December 10, 2021 2:16:04 PM CET    December 10, 2021 2:16:22 PM CET    Success
+Patch location validation                December 10, 2021 2:16:22 PM CET    December 10, 2021 2:16:22 PM CET    Success
+oda-hw-mgmt upgrade                      December 10, 2021 2:16:22 PM CET    December 10, 2021 2:16:55 PM CET    Success
+OSS Patching                             December 10, 2021 2:16:55 PM CET    December 10, 2021 2:16:55 PM CET    Success
+Checking Ilom patch Version              December 10, 2021 2:16:55 PM CET    December 10, 2021 2:16:56 PM CET    Success
+Patch location validation                December 10, 2021 2:16:56 PM CET    December 10, 2021 2:16:56 PM CET    Success
+Save password in Wallet                  December 10, 2021 2:16:56 PM CET    December 10, 2021 2:16:56 PM CET    Success
+Disabling IPMI v2                        December 10, 2021 2:16:56 PM CET    December 10, 2021 2:16:57 PM CET    Success
+Apply Ilom patch                         December 10, 2021 2:16:57 PM CET    December 10, 2021 2:16:57 PM CET    Success
+Copying Flash Bios to Temp location      December 10, 2021 2:16:57 PM CET    December 10, 2021 2:16:57 PM CET    Success
+Starting the clusterware                 December 10, 2021 2:16:57 PM CET    December 10, 2021 2:20:08 PM CET    Success
+registering image                        December 10, 2021 2:20:08 PM CET    December 10, 2021 2:20:08 PM CET    Success
+registering working copy                 December 10, 2021 2:20:08 PM CET    December 10, 2021 2:20:08 PM CET    Success
+registering image                        December 10, 2021 2:20:08 PM CET    December 10, 2021 2:20:08 PM CET    Success
+Creating GI home directories             December 10, 2021 2:20:08 PM CET    December 10, 2021 2:20:08 PM CET    Success
+Extract GI clone                         December 10, 2021 2:20:08 PM CET    December 10, 2021 2:20:08 PM CET    Success
+Provisioning Software Only GI with RHP   December 10, 2021 2:20:08 PM CET    December 10, 2021 2:20:08 PM CET    Success
+Patch GI with RHP                        December 10, 2021 2:20:08 PM CET    December 10, 2021 2:29:39 PM CET    Success
+Updating GIHome version                  December 10, 2021 2:29:39 PM CET    December 10, 2021 2:29:42 PM CET    Success
+Validate GI availability                 December 10, 2021 2:29:49 PM CET    December 10, 2021 2:29:49 PM CET    Success
+Patch KVM CRS type                       December 10, 2021 2:29:49 PM CET    December 10, 2021 2:31:53 PM CET    Success
+Update System version                    December 10, 2021 2:31:53 PM CET    December 10, 2021 2:31:53 PM CET    Success
+Cleanup JRE Home                         December 10, 2021 2:31:53 PM CET    December 10, 2021 2:31:53 PM CET    Success
+Add SYSNAME in Env                       December 10, 2021 2:31:53 PM CET    December 10, 2021 2:31:53 PM CET    Success
+Setting ACL for disk groups              December 10, 2021 2:31:53 PM CET    December 10, 2021 2:31:57 PM CET    Success
+Update lvm.conf file                     December 10, 2021 2:33:30 PM CET    December 10, 2021 2:33:30 PM CET    Success
+Update previous workarounds              December 10, 2021 2:33:30 PM CET    December 10, 2021 2:33:30 PM CET    Success
+preRebootNode Actions                    December 10, 2021 2:33:30 PM CET    December 10, 2021 2:36:52 PM CET    Success
+Reboot Ilom                              December 10, 2021 2:36:52 PM CET    December 10, 2021 2:36:52 PM CET    Success
+Server reboots 5 minutes after the patch ends. On my X8-2M this server patching lasted 30 minutes.
+
+Let’s check the components’ versions now:
+
+odacli describe-component | grep -v ^$ 
+System Version
+---------------
+19.13.0.0.0
+System node Name
+---------------
+dbi-oda-x8
+Local System Version
+---------------
+19.13.0.0.0
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.13.0.0.0           up-to-date
+GI                                        19.13.0.0.211019      up-to-date
+DB                                        19.12.0.0.210720      19.13.0.0.211019
+DCSCONTROLLER                             19.13.0.0.0           up-to-date
+DCSCLI                                    19.13.0.0.0           up-to-date
+DCSAGENT                                  19.13.0.0.0           up-to-date
+DCSADMIN                                  19.13.0.0.0           up-to-date
+OS                                        7.9                   up-to-date
+ILOM                                      5.0.2.24.r141466      up-to-date
+BIOS                                      52050300              up-to-date
+SHARED CONTROLLER FIRMWARE                VDV1RL04              up-to-date
+LOCAL DISK FIRMWARE                       1132                  up-to-date
+SHARED DISK FIRMWARE                      1132                  up-to-date
+HMP                                       2.4.8.0.600           up-to-date
+This looks fine, but please check acfs volumes after reboot!!!
+
+In my particular case, I had problem with acfs volumes not mounting after reboot, even if I tried manually:
+
+mount.acfs -o all
+mount.acfs: CLSU-00107: operating system function: open64; failed with error data: 1; at location: OOF_1
+mount.acfs: CLSU-00101: operating system error message: Operation not permitted
+mount.acfs: CLSU-00104: additional error information: open64 (/dev/asm/commonstore-175)
+mount.acfs: ACFS-02017: Failed to open volume /dev/asm/commonstore-175. Verify the volume exists.
+mount.acfs: ACFS-02014: Mount of /opt/oracle/dcs/commonstore failed.  Error -1 was returned.
+mount.acfs: CLSU-00107: operating system function: open64; failed with error data: 1; at location: OOF_1
+mount.acfs: CLSU-00101: operating system error message: Operation not permitted
+mount.acfs: CLSU-00104: additional error information: open64 (/dev/asm/acfsclone-175)
+mount.acfs: ACFS-02017: Failed to open volume /dev/asm/acfsclone-175. Verify the volume exists.
+mount.acfs: ACFS-02014: Mount of /opt/oracle/oak/pkgrepos/orapkgs/clones failed.  Error -1 was returned.
+...
+I had to reinstall the drivers from the new GI home, and reboot again:
+
+/u01/app/19.13.0.0/grid/bin/crsctl stop crs -f
+CRS-2791: Starting shutdown of Oracle High Availability Services-managed resources on 'dbi-oda-x8'
+CRS-2673: Attempting to stop 'ora.crsd' on 'dbi-oda-x8'
+CRS-2790: Starting shutdown of Cluster Ready Services-managed resources on server 'dbi-oda-x8'
+CRS-2673: Attempting to stop 'ora.cvu' on 'dbi-oda-x8'
+CRS-2673: Attempting to stop 'ora.DATA.ACFSCLONE.advm' on 'dbi-oda-x8'
+CRS-2673: Attempting to stop 'ora.DATA.CESAREVMS.advm' on 'dbi-oda-x8'
+...
+CRS-4133: Oracle High Availability Services has been stopped.
+
+/u01/app/19.13.0.0/grid/bin/acfsroot install
+ACFS-9300: ADVM/ACFS distribution files found.
+ACFS-9314: Removing previous ADVM/ACFS installation.
+ACFS-9315: Previous ADVM/ACFS components successfully removed.
+ACFS-9294: updating file /etc/sysconfig/oracledrivers.conf
+ACFS-9307: Installing requested ADVM/ACFS software.
+ACFS-9294: updating file /etc/sysconfig/oracledrivers.conf
+ACFS-9308: Loading installed ADVM/ACFS drivers.
+ACFS-9321: Creating udev for ADVM/ACFS.
+ACFS-9323: Creating module dependencies - this may take some time.
+ACFS-9154: Loading 'oracleoks.ko' driver.
+ACFS-9154: Loading 'oracleadvm.ko' driver.
+ACFS-9154: Loading 'oracleacfs.ko' driver.
+ACFS-9327: Verifying ADVM/ACFS devices.
+ACFS-9156: Detecting control device '/dev/asm/.asm_ctl_spec'.
+ACFS-9156: Detecting control device '/dev/ofsctl'.
+ACFS-9309: ADVM/ACFS installation correctness verified.
+
+
+/u01/app/19.13.0.0/grid/bin/crsctl start crs
+
+/u01/app/19.13.0.0/grid/bin/acfsroot enable
+
+reboot
+Once done, everything was back to normal.
+
+Patching the storage
+Patching the storage is only needed for older ODAs/patch levels. In case you need to apply a patch on the storage it’s easy: there is a pre-patch, and then the patch:
+
+odacli create-prepatchreport -st -v 19.13.0.0.0
+odacli update-storage -v 19.13.0.0.0
+For HA ODAs using RAC, patching can be done in a rolling fashion:
+
+odacli update-storage -v 19.13.0.0.0 --rolling
+I never encountered troubles during storage patching, so it should be fine.
+
+Patching the DB homes
+Since 19.11, DB homes are created on an acfs filesystem. If you come from 19.9 or 19.10, you will need to configure this filesystem:
+
+odacli configure-dbhome-storage -dg DATA
+Time for patching the DB homes depends on the number of DB homes and number of databases. In this example, 2 DB homes are deployed:
+
+odacli list-dbhomes
+
+ID                                       Name                 DB Version                               Home Location                                 Status
+---------------------------------------- -------------------- ---------------------------------------- --------------------------------------------- ----------
+721c1fc8-b394-4682-b230-21a197e997b3     OraDB19000_home10    19.12.0.0.210720                         /u01/app/odaorahome/oracle/product/19.0.0.0/dbhome_10 CONFIGURED
+2e702142-048e-42a2-a570-82318458f72d     OraDB19000_home11    19.12.0.0.210720                         /u01/app/odaorahome/oracle/product/19.0.0.0/dbhome_11 CONFIGURED
+A prepatching is also needed here, for example if I want to patch the second home:
+
+odacli create-prepatchreport -d -i 2e702142-048e-42a2-a570-82318458f72d -v 19.13.0.0.0
+odacli describe-prepatchreport -i 2f5547b1-e95e-489f-bd68-aba0c4260765
+
+Patch pre-check report
+------------------------------------------------------------------------
+                 Job ID:  2f5547b1-e95e-489f-bd68-aba0c4260765
+            Description:  Patch pre-checks for [DB, ORACHKDB]: DbHome is OraDB19000_home11
+                 Status:  SUCCESS
+                Created:  December 10, 2021 6:12:44 PM CET
+                 Result:  All pre-checks succeeded
+
+Node Name
+---------------
+dbi-oda-x8
+
+Pre-Check                      Status   Comments
+------------------------------ -------- --------------------------------------
+__DB__
+Validate DB Home ID             Success   Validated DB Home ID:
+                                          2e702142-048e-42a2-a570-82318458f72d
+Validate patching tag           Success   Validated patching tag: 19.13.0.0.0.
+Is system provisioned           Success   Verified system is provisioned
+Validate minimum agent version  Success   Validated minimum agent version
+Is GI upgraded                  Success   Validated GI is upgraded
+Validate available space for    Success   Validated free space required under
+db                                        /u01/app/odaorahome
+Validate dbHomesOnACFS          Success   User has configured diskgroup for
+configured                                Database homes on ACFS
+Validate Oracle base            Success   Successfully validated Oracle Base
+Is DB clone available           Success   Successfully validated clone file
+                                          exists
+Evaluate DBHome patching with   Success   Successfully validated updating
+RHP                                       dbhome with RHP
+Validate command execution      Success   Validated command execution
+
+__ORACHK__
+Running orachk                  Success   Successfully ran Orachk
+Validate command execution      Success   Validated command execution
+Now I can apply the patch on this DB home:
+
+odacli update-dbhome -i 2e702142-048e-42a2-a570-82318458f72d -v 19.13.0.0.0 
+odacli describe-job -i ca7673d2-3dd7-45b8-b3e4-9e818b20a4cb
+
+Job details
+----------------------------------------------------------------
+                     ID:  ca7673d2-3dd7-45b8-b3e4-9e818b20a4cb
+            Description:  DB Home Patching: Home Id is 2e702142-048e-42a2-a570-82318458f72d
+                 Status:  Success
+                Created:  December 10, 2021 6:27:49 PM CET
+                Message:
+
+Task Name                                Start Time                          End Time                            Status
+---------------------------------------- ----------------------------------- ----------------------------------- ----------
+Adding USER SSH_EQUIVALENCE              December 10, 2021 6:27:54 PM CET    December 10, 2021 6:27:54 PM CET    Success
+Adding USER SSH_EQUIVALENCE              December 10, 2021 6:27:54 PM CET    December 10, 2021 6:27:54 PM CET    Success
+Adding USER SSH_EQUIVALENCE              December 10, 2021 6:27:54 PM CET    December 10, 2021 6:27:55 PM CET    Success
+Creating wallet for DB Client            December 10, 2021 6:28:32 PM CET    December 10, 2021 6:28:32 PM CET    Success
+Patch databases by RHP                   December 10, 2021 6:28:32 PM CET    December 10, 2021 6:33:15 PM CET    Success
+updating database metadata               December 10, 2021 6:33:15 PM CET    December 10, 2021 6:33:15 PM CET    Success
+Set log_archive_dest for Database        December 10, 2021 6:33:15 PM CET    December 10, 2021 6:33:18 PM CET    Success
+Update System version                    December 10, 2021 6:33:18 PM CET    December 10, 2021 6:33:18 PM CET    Success
+TDE parameter update                     December 10, 2021 6:33:45 PM CET    December 10, 2021 6:33:45 PM CET    Success
+A new DB home has been created and my database is linked to this new one:
+
+odacli list-dbhomes
+
+ID                                       Name                 DB Version                               Home Location                                 Status
+---------------------------------------- -------------------- ---------------------------------------- --------------------------------------------- ----------
+721c1fc8-b394-4682-b230-21a197e997b3     OraDB19000_home10    19.12.0.0.210720                         /u01/app/odaorahome/oracle/product/19.0.0.0/dbhome_10 CONFIGURED
+2e702142-048e-42a2-a570-82318458f72d     OraDB19000_home11    19.12.0.0.210720                         /u01/app/odaorahome/oracle/product/19.0.0.0/dbhome_11 CONFIGURED
+abe18169-18e3-4a3f-a7c8-8c1443863910     OraDB19000_home15    19.13.0.0.211019                         /u01/app/odaorahome/oracle/product/19.0.0.0/dbhome_15 CONFIGURED
+
+odacli list-databases | grep abe18169
+
+617de33b-d9b4-4142-89a5-6bce21e8c00b     DBITSTEE   SI       19.13.0.0.211019     false      OLTP     odb2     ASM        CONFIGURED   abe18169-18e3-4a3f-a7c8-8c1443863910
+The old DB home can be removed safely:
+
+odacli delete-dbhome -i 2e702142-048e-42a2-a570-82318458f72d
+For each database running in that DB home, a parameter needs to be changed:
+
+su - oracle
+. oraenv <<< DBITSTEE
+sqlplus / as sysdba
+alter system set "_enable_numa_support"=true scope=spfile sid='*';
+exit
+srvctl stop database -d DBITSTEE_SITE1
+srvctl start database -d DBITSTEE_SITE1
+This only concerns multi-processor ODAs (not S ones) and it will force an instance to use local memory modules, those associated to the processor where the instance is running. This should improve overall performance.
+
+Patching the other DB homes is done the same way.
+
+Remember that patching the standby databases will raise an error, as datapatch cannot be applied on a mounted or read only database. Patch should be applied on primary and it will then be applied automatically on standby as it’s related to database objects.
+
+Please check my previous blog post about patching ODAs in Data Guard environment.
+
+I would recommand to check on each primary the patch level after patching each DB home:
+
+su – oracle
+. oraenv <<< DBITSTEE
+sqlplus / as sysdba
+set serverout on
+exec dbms_qopatch.get_sqlpatch_status;
+Patch Id : 32876380
+	Action : APPLY
+	Action Time : 03-AUG-2021 16:15:57
+	Description : OJVM RELEASE UPDATE: 19.12.0.0.210720 (32876380)
+	Logfile :
+/u01/app/oracle/cfgtoollogs/sqlpatch/32876380/24269510/32876380_apply_G17741_CDB
+ROOT_2021Aug03_15_59_00.log
+	Status : SUCCESS
+
+Patch Id : 32904851
+	Action : APPLY
+	Action Time : 03-AUG-2021 16:15:57
+	Description : Database Release Update : 19.12.0.0.210720 (32904851)
+	Logfile :
+/u01/app/oracle/cfgtoollogs/sqlpatch/32904851/24343243/32904851_apply_G17741_CDB
+ROOT_2021Aug03_15_59_01.log
+	Status : SUCCESS
+
+Patch Id : 32876380
+	Action : ROLLBACK
+	Action Time : 10-DEC-2021 18:33:12
+	Description : OJVM RELEASE UPDATE: 19.12.0.0.210720 (32876380)
+	Logfile :
+/u01/app/odaorabase/oracle/cfgtoollogs/sqlpatch/32876380/24269510/32876380_rollb
+ack_DBITSTEE_2021Dec10_18_31_06.log
+	Status : SUCCESS
+
+Patch Id : 33192694
+	Action : APPLY
+	Action Time : 10-DEC-2021 18:33:15
+	Description : OJVM RELEASE UPDATE: 19.13.0.0.211019 (33192694)
+	Logfile :
+/u01/app/odaorabase/oracle/cfgtoollogs/sqlpatch/33192694/24421575/33192694_apply
+_DBITSTEE_2021Dec10_18_31_33.log
+	Status : SUCCESS
+
+Patch Id : 33192793
+	Action : APPLY
+	Action Time : 10-DEC-2021 18:33:15
+	Description : Database Release Update : 19.13.0.0.211019 (33192793)
+	Logfile :
+/u01/app/odaorabase/oracle/cfgtoollogs/sqlpatch/33192793/24462514/33192793_apply
+_DBITSTEE_2021Dec10_18_31_33.log
+	Status : SUCCESS
+
+PL/SQL procedure successfully completed.
+exit
+Final checks
+Let’s get the final versions:
+
+odacli describe-component | grep -v ^$
+System Version
+---------------
+19.13.0.0.0
+System node Name
+---------------
+dbi-oda-x8
+Local System Version
+---------------
+19.13.0.0.0
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.13.0.0.0           up-to-date
+GI                                        19.13.0.0.211019      up-to-date
+DB {
+[ OraDB19000_home10 ]                     19.12.0.0.210720      19.13.0.0.211019
+[ OraDB19000_home15 ]                     19.13.0.0.211019      up-to-date
+}
+DCSCONTROLLER                             19.13.0.0.0           up-to-date
+DCSCLI                                    19.13.0.0.0           up-to-date
+DCSAGENT                                  19.13.0.0.0           up-to-date
+DCSADMIN                                  19.13.0.0.0           up-to-date
+OS                                        7.9                   up-to-date
+ILOM                                      5.0.2.24.r141466      up-to-date
+BIOS                                      52050300              up-to-date
+SHARED CONTROLLER FIRMWARE                VDV1RL04              up-to-date
+LOCAL DISK FIRMWARE                       1132                  up-to-date
+SHARED DISK FIRMWARE                      1132                  up-to-date
+HMP                                       2.4.8.0.600           up-to-date
+One of my DB home is still running 19.12 because I didn’t patch it.
+
+Cleanse the old patches
+The old patches will never be used again. For this ODA, history was:
+
+Deploy = 19.10.0.0.0 => Patch 19.12.0.0.0 => Patch 19.13.0.0.0
+
+If you don’t remember the history of your ODA, have a look in this folder:
+
+ls -lrt /opt/oracle/oak/pkgrepos/System/
+total 44
+-rwxr-xr-x. 1 root root 26255 Mar 18  2021 system_repos_metadata.xml
+drwxr-xr-x  2 root root  4096 Aug 27 15:18 19.12.0.0.0
+drwxr-xr-x. 5 root root  4096 Nov  3 09:56 19.10.0.0.0
+drwxrwxr-x  2 root root  4096 Nov 27 17:16 19.13.0.0.0
+drwxr-xr-x. 2 root root  4096 Dec  9 15:54 latest
+You can presume this ODA was deployed with 19.10 and first patched with 19.12.
+
+Let’s remove the previous patch:
+
+odacli cleanup-patchrepo -cl -comp db,gi -v 19.12.0.0.0
+Put back your own settings
+Once everything is OK, don’t forget to put back your settings:
+
+add your additional rpms manually if needed
+put back your profile scripts for grid and oracle users
+…
+And what about DB Systems update?
+If you use DB Systems on your ODA, meaning that some of your databases are running in dedicated VMs, the patch is not applied inside the DB System.
+
+Let’s do a describe component in the VM itself:
+
+odacli describe-component | grep -v ^$
+System Version
+---------------
+19.12.0.0.0
+System node Name
+---------------
+srvdb02
+Local System Version
+---------------
+19.12.0.0.0
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.12.0.0.0           19.13.0.0.0
+GI                                        19.12.0.0.210720      19.13.0.0.211019
+DB                                        19.12.0.0.210720      19.13.0.0.211019
+DCSCONTROLLER                             19.12.0.0.0           19.13.0.0.0
+DCSCLI                                    19.12.0.0.0           19.13.0.0.0
+DCSAGENT                                  19.12.0.0.0           19.13.0.0.0
+DCSADMIN                                  19.12.0.0.0           19.13.0.0.0
+OS                                        7.9                   up-to-date
+Patching a DB System is done being connected to it, and commands are similar to what you’ve done on bare metal.
+
+odacli update-dcsadmin -v 19.13.0.0.0
+odacli update-dcscomponents -v 19.13.0.0.0
+odacli update-dcsagent -v 19.13.0.0.0
+odacli create-prepatchreport -s -v 19.13.0.0.0
+odacli describe-prepatchreport -i 584efe26-ff23-4024-a1e9-8182b2b38a89
+odacli update-server -v 19.13.0.0.0
+odacli create-prepatchreport -d -i b1a0bfd9-5db5-4bce-8e4d-49f07480cc4e -v 19.13.0.0.0
+odacli describe-prepatchreport -i 03b90bd8-a0b5-4998-83ba-c3943917d951
+odacli update-dbhome -i b1a0bfd9-5db5-4bce-8e4d-49f07480cc4e -v 19.13.0.0.0
+odacli delete-dbhome -i b1a0bfd9-5db5-4bce-8e4d-49f07480cc4e
+odacli describe-component | grep -v ^$
+System Version
+---------------
+19.13.0.0.0
+System node Name
+---------------
+srvdb02
+Local System Version
+---------------
+19.13.0.0.0
+Component                                Installed Version    Available Version
+---------------------------------------- -------------------- --------------------
+OAK                                       19.13.0.0.0           up-to-date
+GI                                        19.13.0.0.211019      up-to-date
+DB                                        19.13.0.0.211019      up-to-date
+DCSCONTROLLER                             19.13.0.0.0           up-to-date
+DCSCLI                                    19.13.0.0.0           up-to-date
+DCSAGENT                                  19.13.0.0.0           up-to-date
+DCSADMIN                                  19.13.0.0.0           up-to-date
+OS                                        7.9                   up-to-date
+This seems obvious but you cannot apply a patch on a DB System if the host is not up to date:
+
+Validate BM versions     Failed    Operation: Update Server failed, node dbi-oda-x8 is not running with the supported version for OAK,GI.
+Using DB Systems is a nice option if you want to keep things clean and isolated. But it’s much more work when it comes to patching, as it’s not much faster to patch a DB System compared to bare metal.
+
+Conclusion
+My ODA is now in the latest 19c version. This was not too difficult coming from a recent version, it could be more challenging if you come from an older one.
