@@ -1,0 +1,75 @@
+--https://www.justsomestuff.co.uk/wiki/doku.php/solaris/fault-clearance-oda
+
+sh into the ILO and ype in the following:
+
+ start /SP/faultmgmt/shell
+ Are you sure you want to start /SP/faultmgmt/shell (y/n)? y
+   
+ faultmgmtsp> fmadm faulty -a
+ ------------------- ------------------------------------ -------------- --------
+ Time                UUID                                 msgid          Severity
+ ------------------- ------------------------------------ -------------- --------
+ 2016-06-22/23:29:08 7de79912-89f6-4993-a0f1-ef97b8a8c78e SPX86A-8002-XM Minor
+ 
+ Problem Status    : open
+ Diag Engine       : fdd 1.0
+ System
+    Manufacturer   : Oracle Corporation
+    Name           : ODA X5-2
+    Part_Number    : 34052938+1+1
+    Serial_Number  : 1602NMF00M
+ 
+ System Component
+    Manufacturer   : Oracle Corporation
+    Name           : ORACLE SERVER X5-2
+    Part_Number    : 7092459
+    Serial_Number  : 1602NM10XA
+ 
+ ----------------------------------------
+ Suspect 1 of 1
+    Fault class  : fault.memory.intel.dimm_ce
+    Certainty    : 100%
+    Affects      : /SYS/MB/P1/D0
+    Status       : faulted
+ 
+    FRU
+       Status            : faulty
+       Location          : /SYS/MB/P1/D0
+       Manufacturer      : Hynix Semiconductor Inc.
+       Name              : 32768MB DDR4 SDRAM DIMM
+       Part_Number       : 07075400,HMA84GL7MMR4N-TF
+       Revision          : 01
+       Serial_Number     : 00AD01152480C32D89
+       Chassis
+          Manufacturer   : Oracle Corporation
+          Name           : ORACLE SERVER X5-2
+          Part_Number    : 7092459
+          Serial_Number  : 1602NM10XA
+ 
+ Description : Multiple correctable ECC errors on a memory DIMM have been
+               detected.
+ 
+ Response    : The affected page(s) of memory associated with the faulty
+               memory module maybe immediately retired by the operating
+               system to avoid subsequent errors.
+ 
+ Impact      : The system will continue to operate in the presence of this
+               fault. The memory DIMM is still in use and is not disabled.
+               The memory DIMM is disabled on next system reboot and remains
+               unavailable until repaired. System performance may be
+               impacted slightly due to retired memory pages.
+ 
+ Action      : Please refer to the associated reference document at
+               http://support.oracle.com/msg/SPX86A-8002-XM for the latest
+               service procedures and policies regarding this diagnosis.
+Using the location shown in the output above, you can clear the problem log entry as follows:
+
+ faultmgmtsp> fmadm repair /SYS/MB/P1/D0
+ faultmgmtsp> fmadm faulty -a
+ No faults found
+ faultmgmtsp>
+ faultmgmtsp> exit
+Now, the SP must be reset
+
+> reset /SP
+That's it, done
